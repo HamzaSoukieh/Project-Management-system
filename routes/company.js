@@ -38,4 +38,16 @@ router.put(
     companyController.setProjectManager
 );
 
+router.delete(
+    '/delete-user',
+    isAuth,
+    checkRole('company'), // only company can delete its users
+    [
+        body('userId')
+            .notEmpty().withMessage('User ID is required.')
+            .isMongoId().withMessage('User ID must be a valid Mongo ID.')
+    ],
+    companyController.deleteUser
+);
+
 module.exports = router;
