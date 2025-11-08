@@ -2,19 +2,18 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const User = require('../models/user');
 const { sendVerificationEmail } = require('../utils/mailer');
+const { validationResult } = require('express-validator');
 
 exports.createUser = (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+
     const companyId = req.userId;  // from isAuth
     const { name, email, password, role } = req.body;
 
-    if (!name || !email || !password) {
-        return res.status(400).json({ message: 'Name, email, and password are required' });
-    }
-
-    // Only allow company to create member or PM
-    if (role && role === 'company') {
-        return res.status(403).json({ message: 'Cannot create another company' });
-    }
+    // role validation handled by express-validator, no need for manual check
 
     User.findOne({ email })
         .then(existingUser => {
@@ -23,7 +22,6 @@ exports.createUser = (req, res, next) => {
             return bcrypt.hash(password, 12);
         })
         .then(hashedPassword => {
-            // Generate email verification token
             const emailToken = crypto.randomBytes(32).toString('hex');
             const emailTokenExpires = Date.now() + 3600000; // 1 hour
 
@@ -33,7 +31,7 @@ exports.createUser = (req, res, next) => {
                 password: hashedPassword,
                 role: role || 'member',
                 company: companyId,
-                isVerified: false,           // initially unverified
+                isVerified: false,
                 emailToken,
                 emailTokenExpires
             });
@@ -46,13 +44,13 @@ exports.createUser = (req, res, next) => {
 };
 
 exports.setProjectManager = (req, res, next) => {
-    const { userId } = req.body;  // member to promote
-    const companyId = req.companyId; // ✅ use the company ID from JWT
-    // company making the promotion
-
-    if (!userId) {
-        return res.status(400).json({ message: 'User ID is required' });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
     }
+
+    const { userId } = req.body;  // member to promote
+    const companyId = req.companyId; // from JWT
 
     if (!companyId) {
         return res.status(400).json({ message: 'Missing company ID for logged-in user' });
@@ -61,10 +59,6 @@ exports.setProjectManager = (req, res, next) => {
     User.findById(userId)
         .then(user => {
             if (!user) return res.status(404).json({ message: 'User not found' });
-
-            // Debugging logs (check the console)
-            console.log('Target user company:', user.company ? user.company.toString() : null);
-            console.log('Logged-in company:', companyId ? companyId.toString() : null);
 
             // Prevent promotion from another company
             if (user.company && user.company.toString() !== companyId.toString()) {
@@ -84,4 +78,3 @@ exports.setProjectManager = (req, res, next) => {
             res.status(500).json({ message: err.message });
         });
 };
-
