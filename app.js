@@ -26,8 +26,8 @@ app.use((req, res, next) => {
 
 
 app.use('/auth', authRoutes);
-app.use(companyRoutes);
-app.use(pmsRoutes);
+app.use('/company', companyRoutes);
+app.use('/pm', pmsRoutes);
 //app.use('/projects', projectRoutes);
 
 app.use((error, req, res, next) => {

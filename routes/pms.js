@@ -58,4 +58,37 @@ router.post('/task/create',
             .isISO8601().withMessage('Due date must be a valid date.')
     ],
     pmsController.createTask)
+
+router.put(
+    '/:projectId/status',
+    isAuth,
+    checkRole('projectManager'),
+    [
+        body('status')
+            .isIn(['active', 'completed', 'on hold'])
+            .withMessage('Status must be one of: active, completed, on hold')
+    ],
+    pmsController.updateProjectStatus
+);
+
+router.put(
+    '/tasks/:taskId',
+    isAuth,
+    checkRole('projectManager'),   // only PM can access
+    [
+        body('title').optional().isLength({ min: 1 }).withMessage('Title cannot be empty.'),
+        body('status').optional().isIn(['pending', 'in progress', 'completed']).withMessage('Invalid status value.'),
+        body('description').optional().isString(),
+        body('dueDate').optional().isISO8601().toDate()
+    ],
+    pmsController.updateTaskByPM
+);
+
+router.delete(
+    '/:projectId',
+    isAuth,
+    checkRole('projectManager'),
+    pmsController.deleteProject
+);
+
 module.exports = router;
