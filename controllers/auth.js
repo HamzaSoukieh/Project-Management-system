@@ -7,43 +7,42 @@ const { sendVerificationEmail, sendResetEmail } = require('../utils/mailer');
 require('dotenv').config();
 
 // SIGNUP
-// exports.signup = (req, res, next) => {
-//     const errors = validationResult(req);
-//     if (!errors.isEmpty()) return res.status(422).json({ errors: errors.array() });
+exports.signup = (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(422).json({ errors: errors.array() });
 
-//     const { name, email, password, role } = req.body;
+    const { name, email, password } = req.body;
 
-//     bcrypt.hash(password, 12)
-//         .then(hashedPassword => {
-//             return new Promise((resolve, reject) => {
-//                 crypto.randomBytes(32, (err, buffer) => {
-//                     if (err) return reject(err);
-//                     resolve(buffer.toString('hex')); // generate one token
-//                 });
-//             }).then(token => {
-//                 const user = new User({
-//                     name,
-//                     email,
-//                     password: hashedPassword,
-//                     role: 'member',           // force member role for self-signup
-//                     isVerified: false,
-//                     company: null,            // no company assigned yet
-//                     emailToken: token,
-//                     emailTokenExpires: Date.now() + 3600000
-//                 });
+    bcrypt.hash(password, 12)
+        .then(hashedPassword => {
+            return new Promise((resolve, reject) => {
+                crypto.randomBytes(32, (err, buffer) => {
+                    if (err) return reject(err);
+                    resolve(buffer.toString('hex')); // generate one token
+                });
+            }).then(token => {
+                const user = new User({
+                    name,
+                    email,
+                    password: hashedPassword,
+                    role: 'company',           // force company role for self-signup
+                    isVerified: false,
+                    emailToken: token,
+                    emailTokenExpires: Date.now() + 3600000
+                });
 
-//                 return user.save()
-//                     .then(user => sendVerificationEmail(user.email, token))
-//                     .then(() => res.status(201).json({
-//                         message: 'User created. Check email to verify your account.'
-//                     }));
-//             });
-//         })
-//         .catch(err => {
-//             if (!err.statusCode) err.statusCode = 500;
-//             next(err);
-//         });
-// };
+                return user.save()
+                    .then(user => sendVerificationEmail(user.email, token))
+                    .then(() => {
+                        return res.status(201).json({ message: 'User created. Check email to verify your account.' });
+                    });
+            });
+        })
+        .catch(err => {
+            if (!err.statusCode) err.statusCode = 500;
+            next(err);
+        });
+};
 
 
 

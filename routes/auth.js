@@ -6,32 +6,32 @@ const authController = require('../controllers/auth');
 
 const router = express.Router();
 
-// // Signup route with validation
-// router.post(
-//     '/signup',
-//     [
-//         body('name')
-//             .trim()
-//             .notEmpty()
-//             .withMessage('Name is required.'),
+// Signup route with validation
+router.post(
+    '/signup',
+    [
+        body('name')
+            .trim()
+            .notEmpty()
+            .withMessage('Name is required.'),
 
-//         body('email')
-//             .isEmail()
-//             .withMessage('Invalid email address.')
-//             .custom(value => {
-//                 return User.findOne({ email: value }).then(user => {
-//                     if (user) {
-//                         return Promise.reject('Email already exists.');
-//                     }
-//                 });
-//             }),
+        body('email')
+            .isEmail()
+            .withMessage('Invalid email address.')
+            .custom(value => {
+                return User.findOne({ email: value }).then(user => {
+                    if (user) {
+                        return Promise.reject('Email already exists.');
+                    }
+                });
+            }),
 
-//         body('password')
-//             .isLength({ min: 6 })
-//             .withMessage('Password must be at least 6 characters long.')
-//     ],
-//     authController.signup
-// );
+        body('password')
+            .isLength({ min: 6 })
+            .withMessage('Password must be at least 6 characters long.')
+    ],
+    authController.signup
+);
 
 router.post(
     '/login',
