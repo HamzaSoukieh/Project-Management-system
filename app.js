@@ -10,7 +10,7 @@ const mongoose = require('mongoose');
 const authRoutes = require('./routes/auth');
 const companyRoutes = require('./routes/company');
 const pmsRoutes = require('./routes/pms');
-
+const memberRoutes = require('./routes/member');
 const app = express();
 
 // app.use(bodyParser.urlencoded()); // x-www-form-urlencoded <form>
@@ -28,6 +28,7 @@ app.use((req, res, next) => {
 app.use('/auth', authRoutes);
 app.use('/company', companyRoutes);
 app.use('/pm', pmsRoutes);
+app.use('/member', memberRoutes);
 //app.use('/projects', projectRoutes);
 
 app.use((error, req, res, next) => {

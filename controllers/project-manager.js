@@ -183,3 +183,36 @@ exports.deleteProject = (req, res, next) => {
         .catch(err => res.status(500).json({ message: err.message }));
 };
 
+exports.getPMDashboard = (req, res, next) => {
+    const pmId = req.userId;       // project manager ID
+    const companyId = req.companyId; // company they belong to
+
+    // 1. Find projects the PM manages
+    Project.find({ projectManager: pmId, company: companyId })
+        .then(projects => {
+            const projectIds = projects.map(p => p._id);
+
+            // 2. Find teams under these projects
+            return Team.find({ project: { $in: projectIds }, projectManager: pmId, company: companyId })
+                .populate('members', 'name email role')
+                .populate('project', 'name status description')
+                .then(teams => {
+                    const teamIds = teams.map(t => t._id);
+
+                    // 3. Find tasks for these teams
+                    return Task.find({ team: { $in: teamIds }, company: companyId })
+                        .populate('assignedTo', 'name email role')
+                        .populate('createdBy', 'name email role')
+                        .populate('project', 'name status')
+                        .then(tasks => {
+                            res.status(200).json({
+                                message: 'PM dashboard loaded successfully',
+                                projects,
+                                teams,
+                                tasks
+                            });
+                        });
+                });
+        })
+        .catch(err => res.status(500).json({ message: err.message }));
+};

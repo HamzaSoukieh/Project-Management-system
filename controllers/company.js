@@ -130,3 +130,27 @@ exports.deleteUser = (req, res, next) => {
             res.status(500).json({ message: err.message });
         });
 };
+
+exports.getCompanyDashboard = (req, res, next) => {
+    const companyId = req.userId; // company _id itself
+
+    const projectsPromise = Project.find({ company: companyId });
+    const teamsPromise = Team.find({ company: companyId })
+        .populate('project projectManager members');
+    const tasksPromise = Task.find({ company: companyId })
+        .populate('team project assignedTo createdBy');
+    const usersPromise = User.find({ company: companyId }).select('-password'); // no passwords in the dashboard
+
+    Promise.all([projectsPromise, teamsPromise, tasksPromise, usersPromise])
+        .then(([projects, teams, tasks, users]) => {
+            res.status(200).json({
+                message: 'Company dashboard data fetched successfully.',
+                projects,
+                teams,
+                tasks,
+                users
+            });
+        })
+        .catch(err => res.status(500).json({ message: err.message }));
+};
+

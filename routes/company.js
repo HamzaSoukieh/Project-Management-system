@@ -50,4 +50,10 @@ router.delete(
     companyController.deleteUser
 );
 
+router.get('/dashboard',
+    isAuth,
+    checkRole('company'),
+    companyController.getCompanyDashboard);
+
+
 module.exports = router;

@@ -91,4 +91,11 @@ router.delete(
     pmsController.deleteProject
 );
 
+router.get(
+    '/dashboard',
+    isAuth,
+    checkRole('projectManager'),
+    pmsController.getPMDashboard
+);
+
 module.exports = router;
