@@ -162,6 +162,53 @@ exports.updateTaskByPM = (req, res, next) => {
         .catch(err => res.status(500).json({ message: err.message }));
 };
 
+exports.editTeam = (req, res, next) => {
+    const { teamId } = req.params;
+    const { name, membersToAdd, membersToRemove } = req.body;
+    const pmId = req.userId;
+    const companyId = req.companyId;
+
+    Team.findOne({ _id: teamId, projectManager: pmId, company: companyId })
+        .then(team => {
+            if (!team) {
+                return res.status(404).json({ message: 'Team not found or not yours.' });
+            }
+
+            // Rename team
+            if (name) {
+                team.name = name;
+            }
+
+            // Add members
+            if (Array.isArray(membersToAdd) && membersToAdd.length > 0) {
+                membersToAdd.forEach(member => {
+                    // Only add if not already included
+                    if (!team.members.includes(member)) {
+                        team.members.push(member);
+                    }
+                });
+            }
+
+            // Remove members
+            if (Array.isArray(membersToRemove) && membersToRemove.length > 0) {
+                team.members = team.members.filter(
+                    m => !membersToRemove.includes(m.toString())
+                );
+            }
+
+            return team.save();
+        })
+        .then(updatedTeam => {
+            res.status(200).json({
+                message: 'Team updated successfully.',
+                team: updatedTeam
+            });
+        })
+        .catch(err => {
+            res.status(500).json({ message: err.message });
+        });
+};
+
 exports.deleteProject = (req, res, next) => {
     const projectId = req.params.projectId;
     const pmId = req.userId;

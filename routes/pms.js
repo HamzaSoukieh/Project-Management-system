@@ -84,6 +84,18 @@ router.put(
     pmsController.updateTaskByPM
 );
 
+router.put(
+    '/teams/:teamId',
+    isAuth,
+    checkRole('projectManager'),
+    [
+        body('name').optional().isString().trim().notEmpty(),
+        body('members').optional().isArray(),
+        body('members.*').optional().isMongoId()
+    ],
+    pmsController.editTeam
+);
+
 router.delete(
     '/:projectId',
     isAuth,

@@ -1,10 +1,10 @@
 const path = require('path');
-require('dotenv').config();
-
 
 const express = require('express');
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
+const connectDB = require('./config/db');
+require('dotenv').config();
 
 //const projectRoutes = require('./routes/project');
 const authRoutes = require('./routes/auth');
@@ -29,7 +29,6 @@ app.use('/auth', authRoutes);
 app.use('/company', companyRoutes);
 app.use('/pm', pmsRoutes);
 app.use('/member', memberRoutes);
-//app.use('/projects', projectRoutes);
 
 app.use((error, req, res, next) => {
     console.log(error);
@@ -38,10 +37,13 @@ app.use((error, req, res, next) => {
     res.status(status).json({ message: message });
 });
 
-mongoose
-    .connect('mongodb://localhost:27017/project'
-    )
-    .then(result => {
-        app.listen(8080);
+connectDB()
+    .then(() => {
+        console.log('MongoDB connected');
+        app.listen(process.env.PORT, () => {
+            console.log(`Server running on port ${process.env.PORT}`);
+        });
     })
-    .catch(err => console.log(err));
+    .catch(err => {
+        console.error('Database connection failed:', err);
+    });
