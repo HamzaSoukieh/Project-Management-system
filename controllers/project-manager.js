@@ -3,6 +3,7 @@ const Task = require('../models/task');
 const User = require('../models/user');
 const Project = require('../models/project');
 const { validationResult } = require('express-validator');
+const { sendProjectClosedEmail } = require('../utils/mailer');
 
 exports.createProject = (req, res, next) => {
     const errors = validationResult(req);
@@ -115,6 +116,10 @@ exports.updateProjectStatus = (req, res, next) => {
     const pmId = req.userId;
     const companyId = req.companyId;
 
+    if (!['active', 'on hold'].includes(status)) {
+        return res.status(400).json({ message: "Status must be 'active' or 'on hold'" });
+    }
+
     Project.findOne({ _id: projectId, projectManager: pmId, company: companyId })
         .then(project => {
             if (!project) {
@@ -209,23 +214,62 @@ exports.editTeam = (req, res, next) => {
         });
 };
 
-exports.deleteProject = (req, res, next) => {
+
+exports.closeProject = (req, res, next) => {
     const projectId = req.params.projectId;
     const pmId = req.userId;
-    const companyId = req.companyId;
 
-    Project.findOneAndDelete({ _id: projectId, projectManager: pmId, company: companyId })
+    let closedProject;
+    let pmUser;
+
+    // 1. get PM info for the email
+    User.findById(pmId)
+        .then(pm => {
+            pmUser = pm;
+            return Project.findOne({ _id: projectId, projectManager: pmId });
+        })
         .then(project => {
             if (!project) {
-                return res.status(404).json({ message: 'Project not found or not yours.' });
+                return res.status(404).json({
+                    message: 'Project not found or not under your management.'
+                });
             }
-            return Promise.all([
-                Team.deleteMany({ project: projectId }),
-                Task.deleteMany({ project: projectId })
-            ]);
+
+            project.status = 'completed';
+            return project.save();
+        })
+        .then(project => {
+            closedProject = project;
+
+            // Mark all tasks completed
+            return Task.updateMany(
+                { project: projectId },
+                { $set: { status: 'completed' } }
+            );
         })
         .then(() => {
-            res.status(200).json({ message: 'Project and all related teams and tasks deleted successfully' });
+            // find company owner (companyId is the user who owns the company)
+            return User.findById(closedProject.company);
+        })
+        .then(companyUser => {
+            if (!companyUser) {
+                return res.status(500).json({
+                    message: 'Project closed but company owner not found.'
+                });
+            }
+
+            // send closure email
+            return sendProjectClosedEmail(
+                companyUser.email,
+                closedProject.name,
+                pmUser.name
+            );
+        })
+        .then(() => {
+            res.status(200).json({
+                message: 'Project closed, tasks completed, company notified.',
+                project: closedProject
+            });
         })
         .catch(err => res.status(500).json({ message: err.message }));
 };

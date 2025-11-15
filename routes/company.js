@@ -50,6 +50,13 @@ router.delete(
     companyController.deleteUser
 );
 
+router.delete(
+    '/projects/:projectId',
+    isAuth,
+    checkRole('company'),
+    companyController.deleteProjectAfterClose
+);
+
 router.get('/dashboard',
     isAuth,
     checkRole('company'),

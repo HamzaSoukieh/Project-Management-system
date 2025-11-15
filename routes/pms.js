@@ -4,6 +4,7 @@ const pmsController = require('../controllers/project-manager');
 const isAuth = require('../middleware/is_auth');
 const checkRole = require('../middleware/checkRole');
 const { body } = require('express-validator');
+const sendProjectClosedEmail = require('../utils/mailer');
 
 // only project managers (or company roles, depending on your setup) can create teams
 // Projects
@@ -60,7 +61,7 @@ router.post('/task/create',
     pmsController.createTask)
 
 router.put(
-    '/:projectId/status',
+    '/projects/:projectId/status',
     isAuth,
     checkRole('projectManager'),
     [
@@ -96,11 +97,11 @@ router.put(
     pmsController.editTeam
 );
 
-router.delete(
-    '/:projectId',
+router.patch(
+    '/projects/:projectId/close',
     isAuth,
     checkRole('projectManager'),
-    pmsController.deleteProject
+    pmsController.closeProject
 );
 
 router.get(

@@ -29,3 +29,17 @@ exports.sendResetEmail = (to, token) => {
     `
     });
 };
+
+exports.sendProjectClosedEmail = (to, projectName, pmName) => {
+    return transporter.sendMail({
+        from: process.env.EMAIL_FROM,
+        to,
+        subject: 'Project Closed Notification',
+        html: `
+        <h2>Project Closed</h2>
+        <p>The project <strong>${projectName}</strong> has been officially closed by the project manager <strong>${pmName}</strong>.</p>
+        <p>All related tasks have been marked as completed.</p>
+        <p>If this was expected, no action is required.</p>
+        `
+    });
+};

@@ -131,6 +131,40 @@ exports.deleteUser = (req, res, next) => {
         });
 };
 
+// companyController.deleteProjectAfterClose
+exports.deleteProjectAfterClose = (req, res, next) => {
+    const { projectId } = req.params;
+    const companyId = req.userId; // company is the owner
+
+    // Company can only delete projects that belong to them
+    Project.findOne({ _id: projectId, company: companyId })
+        .then(project => {
+            if (!project) {
+                return res.status(404).json({ message: 'Project not found or not yours.' });
+            }
+
+            // Only allow deletion if PM closed it
+            if (project.status !== 'completed') {
+                return res.status(403).json({
+                    message: 'Project must be closed by the project manager before deletion.'
+                });
+            }
+
+            // Delete all related teams and tasks
+            return Promise.all([
+                Team.deleteMany({ project: projectId }),
+                Task.deleteMany({ project: projectId }),
+                Project.findByIdAndDelete(projectId)
+            ]);
+        })
+        .then(() => {
+            res.status(200).json({
+                message: 'Project, teams, and tasks deleted successfully by company.'
+            });
+        })
+        .catch(err => res.status(500).json({ message: err.message }));
+};
+
 exports.getCompanyDashboard = (req, res, next) => {
     const companyId = req.userId; // company _id itself
 
