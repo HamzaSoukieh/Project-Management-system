@@ -46,11 +46,12 @@ exports.getMemberDashboard = (req, res, next) => {
 
             return Project.findOne({ _id: team.project, company: companyId })
                 .then(project => {
+                    // Fetch ALL team tasks, not only member tasks
                     return Task.find({
-                        assignedTo: memberId,
                         team: team._id,
                         company: companyId
                     })
+                        .populate('assignedTo', 'name email')
                         .populate('createdBy', 'name email')
                         .then(tasks => {
                             res.status(200).json({

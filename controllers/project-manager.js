@@ -274,6 +274,23 @@ exports.closeProject = (req, res, next) => {
         .catch(err => res.status(500).json({ message: err.message }));
 };
 
+exports.getProjectReports = (req, res, next) => {
+    const projectId = req.params.projectId;
+    const pmId = req.userId;
+    const companyId = req.companyId;
+
+    Project.findOne({ _id: projectId, projectManager: pmId, company: companyId })
+        .then(project => {
+            if (!project) return res.status(403).json({ message: 'Not your project.' });
+
+            return Report.find({ project: projectId, company: companyId })
+                .populate('createdBy', 'name email')
+                .then(reports => res.status(200).json({ project, reports }));
+        })
+        .catch(err => res.status(500).json({ message: err.message }));
+};
+
+
 exports.getPMDashboard = (req, res, next) => {
     const pmId = req.userId;       // project manager ID
     const companyId = req.companyId; // company they belong to

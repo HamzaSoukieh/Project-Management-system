@@ -5,6 +5,7 @@ const isAuth = require('../middleware/is_auth');
 const checkRole = require('../middleware/checkRole');
 const { body } = require('express-validator');
 const sendProjectClosedEmail = require('../utils/mailer');
+const reportController = require('../controllers/report');
 
 // only project managers (or company roles, depending on your setup) can create teams
 // Projects
@@ -102,6 +103,20 @@ router.patch(
     isAuth,
     checkRole('projectManager'),
     pmsController.closeProject
+);
+
+router.get(
+    '/projects/:projectId/reports',
+    isAuth,
+    checkRole('projectManager'),
+    reportController.getProjectReports
+);
+
+router.delete(
+    '/reports/:reportId',
+    isAuth,
+    checkRole('projectManager'),
+    reportController.deleteReportByPm
 );
 
 router.get(

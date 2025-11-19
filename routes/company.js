@@ -4,6 +4,8 @@ const companyController = require('../controllers/company');
 const checkRole = require('../middleware/checkRole');
 const isAuth = require('../middleware/is_auth'); // JWT middleware
 const { body } = require('express-validator');
+const companyReports = require('../controllers/report');
+const checkProjectOpen = require('../middleware/checkProjectOpen');
 
 router.post(
     '/create-user',
@@ -57,10 +59,26 @@ router.delete(
     companyController.deleteProjectAfterClose
 );
 
+router.delete(
+    '/reports/:reportId',
+    isAuth,
+    checkRole('company'),
+    companyReports.deleteReportByCompany
+);
+
+router.get(
+    '/reports',
+    isAuth,
+    checkRole('company'),
+    companyReports.getAllCompanyReports
+);
+
+
 router.get('/dashboard',
     isAuth,
     checkRole('company'),
-    companyController.getCompanyDashboard);
+    companyController.getCompanyDashboard
+);
 
 
 module.exports = router;
