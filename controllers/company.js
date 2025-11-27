@@ -61,12 +61,11 @@ exports.setProjectManager = (req, res, next) => {
             if (!user) return res.status(404).json({ message: 'User not found' });
 
             // Prevent promotion of users from other companies
-            if (user.company && user.company.toString() !== companyId.toString()) {
-                return res.status(403).json({ message: 'Cannot promote user from another company' });
+            if (!user.company || user.company.toString() !== companyId.toString()) {
+                return res.status(403).json({ message: 'Cannot promote a user without a company or from another company' });
             }
 
             user.role = 'projectManager';
-            user.company = companyId; // assign company if missing
             return user.save();
         })
         .then(updatedUser => res.status(200).json({
@@ -78,7 +77,6 @@ exports.setProjectManager = (req, res, next) => {
             res.status(500).json({ message: err.message });
         });
 };
-
 
 exports.deleteUser = (req, res, next) => {
     const errors = validationResult(req);

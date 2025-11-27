@@ -1,8 +1,14 @@
-const transporter = require('nodemailer').createTransport(
-    require('nodemailer-sendgrid-transport')({
-        auth: { api_key: process.env.SENDGRID_API_KEY }
-    })
-);
+const nodemailer = require('nodemailer');
+
+const transporter = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: {
+        user: process.env.EMAIL_USER,  // your email address
+        pass: process.env.EMAIL_PASS   // your email app password
+    }
+});
 
 exports.sendVerificationEmail = async (to, token) => {
     return transporter.sendMail({
@@ -25,7 +31,7 @@ exports.sendResetEmail = (to, token) => {
         html: `
       <h2>Password Reset</h2>
       <p>Click below to reset your password (valid for 1 hour):</p>
-      <a href="http://localhost:8080/auth/reset/${token}">Reset Password</a>
+      <a href="http://localhost:3000/reset-password?token=${token}">Reset Password</a>
     `
     });
 };
