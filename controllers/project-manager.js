@@ -35,6 +35,13 @@ exports.createTeam = (req, res, next) => {
     }
 
     const { name, members, projectId } = req.body;
+
+    // Extra check: no duplicate user IDs in team
+    const uniqueMembers = new Set(members);
+    if (uniqueMembers.size !== members.length) {
+        return res.status(400).json({ message: 'Duplicate members are not allowed in the same team.' });
+    }
+
     const pmId = req.userId;
     const companyId = req.companyId;
 
@@ -66,6 +73,7 @@ exports.createTeam = (req, res, next) => {
         .then(team => res.status(201).json({ message: 'Team created successfully', team }))
         .catch(err => res.status(500).json({ message: err.message }));
 };
+
 // Create a new task under a team
 
 exports.createTask = (req, res, next) => {
@@ -273,23 +281,6 @@ exports.closeProject = (req, res, next) => {
         })
         .catch(err => res.status(500).json({ message: err.message }));
 };
-
-exports.getProjectReports = (req, res, next) => {
-    const projectId = req.params.projectId;
-    const pmId = req.userId;
-    const companyId = req.companyId;
-
-    Project.findOne({ _id: projectId, projectManager: pmId, company: companyId })
-        .then(project => {
-            if (!project) return res.status(403).json({ message: 'Not your project.' });
-
-            return Report.find({ project: projectId, company: companyId })
-                .populate('createdBy', 'name email')
-                .then(reports => res.status(200).json({ project, reports }));
-        })
-        .catch(err => res.status(500).json({ message: err.message }));
-};
-
 
 exports.getPMDashboard = (req, res, next) => {
     const pmId = req.userId;       // project manager ID

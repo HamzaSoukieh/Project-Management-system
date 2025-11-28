@@ -20,7 +20,8 @@ router.post('/project/create',
             .notEmpty().withMessage('Project description is required.')
             .isLength({ max: 500 }).withMessage('Project description can be max 500 characters.')
     ],
-    pmsController.createProject);
+    pmsController.createProject
+);
 
 // Teams
 router.post('/team/create',
@@ -59,7 +60,7 @@ router.post('/task/create',
             .optional()
             .isISO8601().withMessage('Due date must be a valid date.')
     ],
-    pmsController.createTask)
+    pmsController.createTask);
 
 router.put(
     '/projects/:projectId/status',
@@ -67,7 +68,7 @@ router.put(
     checkRole('projectManager'),
     [
         body('status')
-            .isIn(['active', 'completed', 'on hold'])
+            .isIn(['active', 'on hold'])
             .withMessage('Status must be one of: active, completed, on hold')
     ],
     pmsController.updateProjectStatus

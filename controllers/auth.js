@@ -105,7 +105,7 @@ exports.login = (req, res, next) => {
                     company: foundUser.company // important for multi-company checks
                 },
                 process.env.JWT_SECRET,
-                { expiresIn: '1h' }
+                { expiresIn: '7d' }
             );
 
             res.status(200).json({
