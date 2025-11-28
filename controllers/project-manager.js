@@ -195,18 +195,24 @@ exports.editTeam = (req, res, next) => {
             // Add members
             if (Array.isArray(membersToAdd) && membersToAdd.length > 0) {
                 membersToAdd.forEach(member => {
-                    // Only add if not already included
                     if (!team.members.includes(member)) {
                         team.members.push(member);
                     }
                 });
             }
 
-            // Remove members
+            // Remove members and their tasks
             if (Array.isArray(membersToRemove) && membersToRemove.length > 0) {
                 team.members = team.members.filter(
                     m => !membersToRemove.includes(m.toString())
                 );
+
+                // Delete all tasks assigned to the removed members in this team
+                return Task.deleteMany({
+                    assignedTo: { $in: membersToRemove },
+                    team: teamId,
+                    company: companyId
+                }).then(() => team.save());
             }
 
             return team.save();
@@ -221,6 +227,7 @@ exports.editTeam = (req, res, next) => {
             res.status(500).json({ message: err.message });
         });
 };
+
 
 
 exports.closeProject = (req, res, next) => {
