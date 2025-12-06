@@ -1,6 +1,7 @@
 const { validationResult } = require('express-validator');
 const Report = require('../models/report');
 const Project = require('../models/project');
+const Team = require('../models/team');
 const fs = require('fs');
 const path = require('path');
 
