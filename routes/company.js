@@ -10,7 +10,7 @@ const companyReports = require('../controllers/report');
 const checkProjectOpen = require('../middleware/checkProjectOpen');
 
 router.post(
-    '/company/create',
+    '/create-company',
     isAuth,
     checkRole('company'),
     [
