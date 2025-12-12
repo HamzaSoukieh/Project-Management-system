@@ -1,11 +1,31 @@
 const express = require('express');
 const router = express.Router();
+
 const companyController = require('../controllers/company');
+
 const checkRole = require('../middleware/checkRole');
 const isAuth = require('../middleware/is_auth'); // JWT middleware
 const { body } = require('express-validator');
 const companyReports = require('../controllers/report');
 const checkProjectOpen = require('../middleware/checkProjectOpen');
+
+router.post(
+    '/company/create',
+    isAuth,
+    checkRole('company'),
+    [
+        body('name')
+            .trim()
+            .notEmpty().withMessage('Company name is required')
+            .isLength({ min: 3 }).withMessage('Name must be at least 3 characters'),
+
+        body('description')
+            .optional()
+            .trim()
+            .isLength({ max: 500 }).withMessage('Description too long')
+    ],
+    companyController.createCompany
+);
 
 router.post(
     '/create-user',

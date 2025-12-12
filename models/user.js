@@ -14,7 +14,8 @@ const userSchema = new Schema({
     emailTokenExpires: Date,
     emailToken: String,
     resetToken: { type: String },
-    resetTokenExpiration: { type: Date }
+    resetTokenExpiration: { type: Date },
+    photo: { type: String, default: null }
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);

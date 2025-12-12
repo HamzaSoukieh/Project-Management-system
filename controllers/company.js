@@ -3,10 +3,53 @@ const crypto = require('crypto');
 const User = require('../models/user');
 const Task = require('../models/task');
 const Team = require('../models/team');
+const Company = require('../models/company');
 const Project = require('../models/project');
 const { sendVerificationEmail } = require('../utils/mailer');
 const { validationResult } = require('express-validator');
 
+
+exports.createCompany = (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(422).json({ errors: errors.array() });
+    }
+
+    const userId = req.userId;
+    const { name, description } = req.body;
+
+    User.findById(userId)
+        .then(user => {
+            if (!user) {
+                return res.status(404).json({ message: 'User not found' });
+            }
+
+            if (user.company) {
+                return res.status(400).json({ message: 'Company already created' });
+            }
+
+            const company = new Company({
+                name,
+                description,
+                owner: userId
+            });
+
+            return company.save().then(savedCompany => {
+                user.company = savedCompany._id;
+                return user.save().then(() => savedCompany);
+            });
+        })
+        .then(company => {
+            res.status(201).json({
+                message: 'Company created successfully',
+                company
+            });
+        })
+        .catch(err => {
+            console.error(err);
+            res.status(500).json({ message: 'Something went wrong', error: err.message });
+        });
+};
 
 exports.createUser = (req, res, next) => {
     const errors = validationResult(req);

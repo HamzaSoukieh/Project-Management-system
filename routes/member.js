@@ -4,7 +4,8 @@ const reportController = require('../controllers/report');
 const isAuth = require('../middleware/is_auth');
 const checkRole = require('../middleware/checkRole');
 const checkProjectOpen = require('../middleware/checkProjectOpen');
-const upload = require('../config/multer');
+const { uploadUserPhoto, uploadReport } = require('../config/multer');
+
 
 const express = require('express');
 const router = express.Router();
@@ -13,7 +14,7 @@ router.post(
     '/reports',
     isAuth,
     checkRole('member'),
-    upload.single('file'),
+    uploadReport,
     [
         body('title').notEmpty().withMessage('Title is required'),
         body('description').optional(),
