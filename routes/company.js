@@ -3,6 +3,7 @@ const router = express.Router();
 
 const companyReports = require('../controllers/report');
 const companyController = require('../controllers/company');
+const trackinController = require('../controllers/trackingController');
 
 const checkRole = require('../middleware/checkRole');
 const isAuth = require('../middleware/is_auth'); // JWT middleware
@@ -105,5 +106,8 @@ router.get('/dashboard',
 router.get("/projects", isAuth, checkRole("company"), companyController.getCompanyProjects);
 
 router.get("/tasks", isAuth, checkRole("company"), companyController.getCompanyTasks);
+
+router.get("/projects/tracking", isAuth, checkRole("company"), trackinController.getCompanyProjectsTracking);
+
 
 module.exports = router;

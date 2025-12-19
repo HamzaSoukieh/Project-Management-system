@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pmsController = require('../controllers/project-manager');
+const trackingController = require('../controllers/trackingController');
 const isAuth = require('../middleware/is_auth');
 const checkRole = require('../middleware/checkRole');
 const { body } = require('express-validator');
@@ -137,5 +138,7 @@ router.get("/tasks", isAuth, checkRole("projectManager"), pmsController.getPMTas
 
 // MEMBERS (only members in PM teams/projects) - optional
 router.get("/members", isAuth, checkRole("projectManager"), pmsController.getPMMembers);
+
+router.get("/projects/tracking", isAuth, checkRole("projectManager"), trackingController.getPMProjectsTracking);
 
 module.exports = router;
