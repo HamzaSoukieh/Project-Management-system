@@ -1,12 +1,14 @@
 const express = require('express');
 const router = express.Router();
 
+const companyReports = require('../controllers/report');
 const companyController = require('../controllers/company');
 
 const checkRole = require('../middleware/checkRole');
 const isAuth = require('../middleware/is_auth'); // JWT middleware
 const { body } = require('express-validator');
-const companyReports = require('../controllers/report');
+
+
 const checkProjectOpen = require('../middleware/checkProjectOpen');
 
 router.post(
@@ -100,5 +102,8 @@ router.get('/dashboard',
     companyController.getCompanyDashboard
 );
 
+router.get("/projects", isAuth, checkRole("company"), companyController.getCompanyProjects);
+
+router.get("/tasks", isAuth, checkRole("company"), companyController.getCompanyTasks);
 
 module.exports = router;

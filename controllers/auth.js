@@ -18,25 +18,26 @@ exports.signup = (req, res, next) => {
             return new Promise((resolve, reject) => {
                 crypto.randomBytes(32, (err, buffer) => {
                     if (err) return reject(err);
-                    resolve(buffer.toString('hex')); // generate one token
+                    resolve(buffer.toString('hex'));
                 });
             }).then(token => {
                 const user = new User({
                     name,
                     email,
                     password: hashedPassword,
-                    role: 'company',           // force company role for self-signup
+                    role: 'company',
                     isVerified: false,
                     emailToken: token,
                     emailTokenExpires: Date.now() + 3600000
                 });
 
                 return user.save()
-                    .then(user => sendVerificationEmail(user.email, token))
-                    .then(() => {
-                        return res.status(201).json({ message: 'User created. Check email to verify your account.' });
-                    });
+                    .then(saved => sendVerificationEmail(saved.email, token).then(() => saved));
             });
+        })
+        .then(savedUser => {
+            if (!savedUser) return;
+            return res.status(201).json({ message: 'User created. Check email to verify your account.' });
         })
         .catch(err => {
             if (!err.statusCode) err.statusCode = 500;
@@ -44,18 +45,17 @@ exports.signup = (req, res, next) => {
         });
 };
 
-
-
 exports.verifyEmail = (req, res, next) => {
     const token = req.params.token;
 
     User.findOne({
-        emailToken: req.params.token,
-        emailTokenExpires: { $gt: Date.now() } // token still valid
+        emailToken: token,
+        emailTokenExpires: { $gt: Date.now() }
     })
         .then(user => {
             if (!user) {
-                return res.status(400).json({ message: 'Invalid or expired token.' });
+                res.status(400).json({ message: 'Invalid or expired token.' });
+                return null; // ✅ stop chain (prevents second response later)
             }
 
             user.isVerified = true;
@@ -63,12 +63,15 @@ exports.verifyEmail = (req, res, next) => {
             user.emailTokenExpires = undefined;
             return user.save();
         })
-        .then(() => res.status(200).json({ message: 'Email verified successfully.' }))
+        .then(saved => {
+            if (!saved) return; // ✅ already responded
+            res.status(200).json({ message: 'Email verified successfully.' });
+        })
         .catch(err => {
+            if (res.headersSent) return; // ✅ avoid double send from error middleware
             if (!err.statusCode) err.statusCode = 500;
             next(err);
         });
-
 };
 
 // LOGIN
@@ -84,25 +87,30 @@ exports.login = (req, res, next) => {
     User.findOne({ email })
         .then(user => {
             if (!user) {
-                return res.status(401).json({ message: 'Invalid email or password' });
+                res.status(401).json({ message: 'Invalid email or password' });
+                return null; // ✅ stop chain
             }
             foundUser = user;
             return bcrypt.compare(password, user.password);
         })
         .then(isMatch => {
+            if (isMatch === null) return null; // ✅ already responded
+
             if (!isMatch) {
-                return res.status(401).json({ message: 'Invalid email or password' });
+                res.status(401).json({ message: 'Invalid email or password' });
+                return null; // ✅ stop chain
             }
 
             if (!foundUser.isVerified) {
-                return res.status(403).json({ message: 'Please verify your email before logging in.' });
+                res.status(403).json({ message: 'Please verify your email before logging in.' });
+                return null; // ✅ stop chain
             }
 
             const token = jwt.sign(
                 {
                     userId: foundUser._id,
                     role: foundUser.role,
-                    company: foundUser.company // important for multi-company checks
+                    company: foundUser.company
                 },
                 process.env.JWT_SECRET,
                 { expiresIn: '7d' }
@@ -113,12 +121,14 @@ exports.login = (req, res, next) => {
                 userId: foundUser._id,
                 role: foundUser.role
             });
+
+            return true;
         })
         .catch(err => {
+            if (res.headersSent) return;
             res.status(500).json({ message: err.message });
         });
 };
-
 
 exports.postReset = (req, res, next) => {
     const errors = validationResult(req);
@@ -146,7 +156,7 @@ exports.postReset = (req, res, next) => {
                 }
 
                 user.resetToken = token;
-                user.resetTokenExpiration = Date.now() + 3600000; // 1 hour expiry
+                user.resetTokenExpiration = Date.now() + 3600000;
                 return user.save();
             })
             .then(user => sendResetEmail(user.email, token))
@@ -154,13 +164,14 @@ exports.postReset = (req, res, next) => {
                 res.status(200).json({ message: 'Password reset email sent.' });
             })
             .catch(err => {
+                if (res.headersSent) return;
                 if (!err.statusCode) err.statusCode = 500;
                 next(err);
             });
     });
 };
 
-// --- Reset password using token ---
+// Reset password using token
 exports.postNewPassword = (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -197,6 +208,7 @@ exports.postNewPassword = (req, res, next) => {
             res.status(200).json({ message: 'Password has been reset successfully.' });
         })
         .catch(err => {
+            if (res.headersSent) return;
             if (!err.statusCode) err.statusCode = 500;
             next(err);
         });

@@ -12,6 +12,8 @@ const companyRoutes = require('./routes/company');
 const pmsRoutes = require('./routes/pms');
 const memberRoutes = require('./routes/member');
 const userRoutes = require('./routes/user');
+const projectRoutes = require('./routes/projects');
+
 const app = express();
 
 // app.use(bodyParser.urlencoded()); // x-www-form-urlencoded <form>
@@ -33,6 +35,8 @@ app.use('/company', companyRoutes);
 app.use('/pm', pmsRoutes);
 app.use('/member', memberRoutes);
 app.use('/me', userRoutes);
+app.use('/projects', projectRoutes);
+
 
 app.use((error, req, res, next) => {
     console.log(error);

@@ -14,16 +14,20 @@ exports.getMyProfile = (req, res, next) => {
         .populate('team', 'name members')
         .then(user => {
             if (!user) {
-                return res.status(404).json({ message: 'User not found' });
+                res.status(404).json({ message: 'User not found' });
+                return null; // ✅ stop chain
             }
 
             res.status(200).json({
                 message: 'Profile data loaded',
                 user
             });
+
+            return true;
         })
         .catch(err => {
             console.error(err);
+            if (res.headersSent) return;
             res.status(500).json({ message: err.message });
         });
 };
@@ -51,16 +55,20 @@ exports.updateMyProfile = (req, res, next) => {
         .populate('team', 'name members')
         .then(updated => {
             if (!updated) {
-                return res.status(404).json({ message: 'User not found' });
+                res.status(404).json({ message: 'User not found' });
+                return null; // ✅ stop chain
             }
 
             res.status(200).json({
                 message: 'Profile updated',
                 user: updated
             });
+
+            return true;
         })
         .catch(err => {
             console.error(err);
+            if (res.headersSent) return;
             res.status(500).json({ message: err.message });
         });
 };

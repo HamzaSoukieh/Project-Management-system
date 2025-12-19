@@ -127,4 +127,15 @@ router.get(
     pmsController.getPMDashboard
 );
 
+router.get("/projects", isAuth, checkRole("projectManager"), pmsController.getPMProjects);
+
+// TEAMS (only teams under PM projects)
+router.get("/teams", isAuth, checkRole("projectManager"), pmsController.getPMTeams);
+
+// TASKS (only tasks under PM projects)
+router.get("/tasks", isAuth, checkRole("projectManager"), pmsController.getPMTasks);
+
+// MEMBERS (only members in PM teams/projects) - optional
+router.get("/members", isAuth, checkRole("projectManager"), pmsController.getPMMembers);
+
 module.exports = router;

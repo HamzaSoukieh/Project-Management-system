@@ -63,4 +63,12 @@ router.get(
     memberController.getMemberDashboard
 );
 
+router.get("/tasks", isAuth, checkRole("member"), memberController.getMemberTasks);       // paginated list of MY tasks
+
+// TEAMS (member scope) - optional
+router.get("/teams", isAuth, checkRole("member"), memberController.getMemberTeams);
+
+// PROJECTS (member scope) - optional
+router.get("/projects", isAuth, checkRole("member"), memberController.getMemberProjects);
+
 module.exports = router;
