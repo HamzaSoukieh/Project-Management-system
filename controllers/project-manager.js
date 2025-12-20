@@ -175,86 +175,45 @@ exports.createTask = (req, res) => {
         });
 };
 
-exports.updateTaskByPM = (req, res) => {
+
+exports.updateTaskByPM = async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-    const { taskId } = req.params;
-    const { title, description, dueDate, status, progress, estimatedHours, priority, assignedTo } = req.body;
+    try {
+        const { taskId } = req.params;
+        const companyId = req.companyId;
+        const pmId = req.userId;
 
-    const pmId = req.userId;
-    const companyId = req.companyId;
+        // 1) Load task (company scoped)
+        const task = await Task.findOne({ _id: taskId, company: companyId });
+        if (!task) return res.status(404).json({ message: "Task not found." });
 
-    Task.findOne({ _id: taskId, company: companyId })
-        .then(function (task) {
-            if (!task) {
-                res.status(404).json({ message: "Task not found." });
-                return null; // ✅ stop chain
-            }
-
-            // PM must manage the task's project
-            return Project.exists({ _id: task.project, projectManager: pmId, company: companyId })
-                .then(function (ok) {
-                    if (!ok) {
-                        res.status(403).json({ message: "Not allowed." });
-                        return null; // ✅ stop chain
-                    }
-
-                    if (title) task.title = title;
-                    if (description) task.description = description;
-                    if (dueDate) task.dueDate = dueDate;
-
-                    if (typeof estimatedHours === "number" && estimatedHours >= 0) {
-                        task.estimatedHours = estimatedHours;
-                    }
-
-                    if (typeof progress === "number" && progress >= 0 && progress <= 100) {
-                        task.progress = progress;
-                    }
-
-                    if (status && ["pending", "in progress", "completed", "blocked"].includes(status)) {
-                        task.status = status;
-                    }
-
-                    if (priority && ["low", "medium", "high"].includes(priority)) {
-                        task.priority = priority;
-                    }
-
-                    // Optional reassignment: ensure assignedTo is in the same team
-                    if (assignedTo) {
-                        return Team.findOne({ _id: task.team, company: companyId })
-                            .select("members")
-                            .then(function (team) {
-                                if (!team) {
-                                    res.status(400).json({ message: "Task team not found." });
-                                    return null; // ✅ stop chain
-                                }
-
-                                const okMember = team.members.some(function (m) {
-                                    return String(m) === String(assignedTo);
-                                });
-                                if (!okMember) {
-                                    res.status(403).json({ message: "Assigned user not in this team." });
-                                    return null; // ✅ stop chain
-                                }
-
-                                task.assignedTo = assignedTo;
-                                return task.save();
-                            });
-                    }
-
-                    return task.save();
-                });
-        })
-        .then(function (updatedTask) {
-            if (!updatedTask) return; // ✅ already responded OR stopped
-            res.status(200).json({ message: "Task updated successfully", task: updatedTask });
-        })
-        .catch(function (err) {
-            if (res.headersSent) return;
-            res.status(500).json({ message: err.message });
+        // 2) PM must manage the task's team
+        const isPmOfTeam = await Team.exists({
+            _id: task.team,
+            company: companyId,
+            projectManager: pmId,
         });
+
+        if (!isPmOfTeam) {
+            return res.status(403).json({ message: "Not allowed." });
+        }
+
+        // 3) Update allowed fields only
+        const allowed = ["title", "description", "dueDate", "status", "progress", "estimatedHours", "priority"];
+        for (const key of allowed) {
+            if (req.body[key] !== undefined) task[key] = req.body[key];
+        }
+
+        await task.save();
+        return res.status(200).json({ message: "Task updated successfully", task });
+    } catch (err) {
+        return res.status(500).json({ message: err.message });
+    }
 };
+
+
 
 exports.editTeam = (req, res, next) => {
     const { teamId } = req.params;
