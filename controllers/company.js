@@ -468,5 +468,36 @@ exports.getCompanyTasks = (req, res) => {
         });
 };
 
+exports.getCompanyUsers = (req, res) => {
+    const companyId = req.userId;
 
+    const page = Math.max(parseInt(req.query.page || "1", 10), 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit || "20", 10), 1), 100);
+    const skip = (page - 1) * limit;
+
+    const filter = { company: companyId };
+
+    const usersPromise = User.find(filter)
+        .select("_id name email role team isVerified createdAt")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+
+    const countPromise = User.countDocuments(filter);
+
+    Promise.all([usersPromise, countPromise])
+        .then(([users, total]) => {
+            res.json({
+                page,
+                limit,
+                total,
+                users
+            });
+        })
+        .catch(err => {
+            if (res.headersSent) return;
+            res.status(500).json({ message: err.message });
+        });
+};
 

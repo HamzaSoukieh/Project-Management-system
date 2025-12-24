@@ -109,5 +109,6 @@ router.get("/tasks", isAuth, checkRole("company"), companyController.getCompanyT
 
 router.get("/projects/tracking", isAuth, checkRole("company"), trackinController.getCompanyProjectsTracking);
 
+router.get("/all-members", isAuth, checkRole("company"), companyController.getCompanyUsers);
 
 module.exports = router;

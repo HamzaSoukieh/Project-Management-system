@@ -19,7 +19,16 @@ router.post('/project/create',
             .isLength({ max: 100 }).withMessage('Project name can be max 100 characters.'),
         body('description')
             .notEmpty().withMessage('Project description is required.')
-            .isLength({ max: 500 }).withMessage('Project description can be max 500 characters.')
+            .isLength({ max: 500 }).withMessage('Project description can be max 500 characters.'),
+        body("dueDate")
+            .notEmpty().withMessage("Deadline is required")
+            .isISO8601().withMessage("Invalid deadline format")
+            .toDate(),
+        body("startDate")
+            .optional()
+            .isISO8601().withMessage("Invalid start date format")
+            .toDate()
+
     ],
     pmsController.createProject
 );
@@ -137,8 +146,10 @@ router.get("/teams", isAuth, checkRole("projectManager"), pmsController.getPMTea
 router.get("/tasks", isAuth, checkRole("projectManager"), pmsController.getPMTasks);
 
 // MEMBERS (only members in PM teams/projects) - optional
-router.get("/members", isAuth, checkRole("projectManager"), pmsController.getPMMembers);
+router.get("/team-members", isAuth, checkRole("projectManager"), pmsController.getPMMembers);
 
 router.get("/projects/tracking", isAuth, checkRole("projectManager"), trackingController.getPMProjectsTracking);
+
+router.get("/all-members", isAuth, checkRole("projectManager"), pmsController.getPMUsers);
 
 module.exports = router;

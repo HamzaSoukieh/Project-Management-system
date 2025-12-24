@@ -12,8 +12,15 @@ const projectSchema = new Schema(
 
         teams: [{ type: Schema.Types.ObjectId, ref: "Team" }],
 
-        startDate: Date,
-        dueDate: Date,
+        startDate: {
+            type: Date,
+            default: Date.now
+        },
+        dueDate: {
+            type: Date,
+            required: true
+        }
+
     },
     { timestamps: true }
 );

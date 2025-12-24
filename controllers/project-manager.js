@@ -11,16 +11,19 @@ exports.createProject = (req, res, next) => {
         return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, description } = req.body;
+    const { name, description, startDate, dueDate } = req.body;
     const pmId = req.userId;
     const companyId = req.companyId;
 
     const project = new Project({
         name,
         description,
+        startDate,
+        dueDate,
         projectManager: pmId,
         company: companyId
     });
+
 
     project.save()
         .then(proj => res.status(201).json({ message: 'Project created successfully', project: proj }))
@@ -457,7 +460,7 @@ exports.getPMProjects = (req, res) => {
     }
 
     const listPromise = Project.find(filter)
-        .select("name status dueDate startDate createdAt")
+        .select("name description  status dueDate startDate createdAt")
         // Sensible default: newest projects first
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -671,3 +674,45 @@ exports.getPMMembers = (req, res) => {
             res.status(500).json({ message: err.message });
         });
 };
+
+exports.getPMUsers = (req, res) => {
+    if (req.userRole !== "projectManager") {
+        return res.status(403).json({ message: "Access denied" });
+    }
+
+    const companyId = req.companyId;
+    const pmId = req.userId;
+
+    const page = Math.max(parseInt(req.query.page || "1", 10), 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit || "20", 10), 1), 100);
+    const skip = (page - 1) * limit;
+
+    const filter = {
+        company: companyId,
+        _id: { $ne: pmId }
+    };
+
+    const usersPromise = User.find(filter)
+        .select("_id name email role team createdAt")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+
+    const countPromise = User.countDocuments(filter);
+
+    Promise.all([usersPromise, countPromise])
+        .then(([users, total]) => {
+            res.json({
+                page,
+                limit,
+                total,
+                users
+            });
+        })
+        .catch(err => {
+            if (res.headersSent) return;
+            res.status(500).json({ message: err.message });
+        });
+};
+
