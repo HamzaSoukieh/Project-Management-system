@@ -344,7 +344,7 @@ exports.getCompanyProjects = (req, res) => {
     else if (active) filter.status = "active";
 
     const listPromise = Project.find(filter)
-        .select("name description status dueDate startDate projectManager createdAt company")
+        .select("name description status dueDate startDate projectManager company")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)

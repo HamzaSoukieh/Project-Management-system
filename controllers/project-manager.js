@@ -460,7 +460,7 @@ exports.getPMProjects = (req, res) => {
     }
 
     const listPromise = Project.find(filter)
-        .select("name description  status dueDate startDate createdAt")
+        .select("name description  status dueDate startDate")
         // Sensible default: newest projects first
         .sort({ createdAt: -1 })
         .skip(skip)

@@ -336,7 +336,7 @@ exports.getMemberProjects = (req, res) => {
             if (req.query.status) filter.status = req.query.status;
 
             const listPromise = Project.find(filter)
-                .select("name status dueDate startDate projectManager createdAt")
+                .select("name status dueDate startDate projectManager")
                 .populate("projectManager", "name email")
                 .sort({ createdAt: -1 })
                 .skip(skip)
