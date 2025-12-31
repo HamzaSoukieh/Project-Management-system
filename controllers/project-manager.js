@@ -269,33 +269,79 @@ exports.updateTaskByPM = async (req, res) => {
         const companyId = req.companyId;
         const pmId = req.userId;
 
+        const { assignedToName } = req.body;
+
         // 1) Load task (company scoped)
         const task = await Task.findOne({ _id: taskId, company: companyId });
-        if (!task) return res.status(404).json({ message: "Task not found." });
+        if (!task) {
+            return res.status(404).json({ message: "Task not found." });
+        }
 
         // 2) PM must manage the task's team
         const isPmOfTeam = await Team.exists({
             _id: task.team,
             company: companyId,
-            projectManager: pmId,
+            projectManager: pmId
         });
 
         if (!isPmOfTeam) {
             return res.status(403).json({ message: "Not allowed." });
         }
 
-        // 3) Update allowed fields only
-        const allowed = ["title", "description", "dueDate", "status", "progress", "estimatedHours", "priority"];
+        // 3) If assignedToName is provided → resolve by NAME
+        if (assignedToName !== undefined) {
+            const user = await User.findOne({
+                name: assignedToName,
+                company: companyId
+            }).select("_id");
+
+            if (!user) {
+                return res.status(404).json({ message: "Assigned user not found." });
+            }
+
+            // ensure user is in the same team
+            const isMember = await Team.exists({
+                _id: task.team,
+                members: user._id
+            });
+
+            if (!isMember) {
+                return res
+                    .status(403)
+                    .json({ message: "Assigned user is not in this team." });
+            }
+
+            task.assignedTo = user._id;
+        }
+
+        // 4) Update allowed fields only
+        const allowed = [
+            "title",
+            "description",
+            "dueDate",
+            "status",
+            "progress",
+            "estimatedHours",
+            "priority"
+        ];
+
         for (const key of allowed) {
-            if (req.body[key] !== undefined) task[key] = req.body[key];
+            if (req.body[key] !== undefined) {
+                task[key] = req.body[key];
+            }
         }
 
         await task.save();
-        return res.status(200).json({ message: "Task updated successfully", task });
+
+        return res.status(200).json({
+            message: "Task updated successfully",
+            task
+        });
     } catch (err) {
         return res.status(500).json({ message: err.message });
     }
 };
+
 
 
 
