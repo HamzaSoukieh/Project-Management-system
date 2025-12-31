@@ -52,25 +52,27 @@ router.post(
 );
 // Only a company can assign project managers
 router.put(
-    '/set-manager',
+    "/set-manager",
     isAuth,
-    checkRole('company'),
+    checkRole("company"),
     [
-        body('userId')
-            .notEmpty().withMessage('User ID is required.')
-            .isMongoId().withMessage('User ID must be a valid Mongo ID.')
+        body("name")
+            .trim()
+            .notEmpty().withMessage("User name is required.")
+            .isLength({ max: 100 }).withMessage("User name can be max 100 characters.")
     ],
     companyController.setProjectManager
 );
 
 router.delete(
-    '/delete-user',
+    "/delete-user",
     isAuth,
-    checkRole('company'), // only company can delete its users
+    checkRole("company"),
     [
-        body('userId')
-            .notEmpty().withMessage('User ID is required.')
-            .isMongoId().withMessage('User ID must be a valid Mongo ID.')
+        body("name")
+            .trim()
+            .notEmpty().withMessage("User name is required.")
+            .isLength({ max: 100 }).withMessage("User name can be max 100 characters.")
     ],
     companyController.deleteUser
 );

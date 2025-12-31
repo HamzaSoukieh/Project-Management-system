@@ -102,86 +102,82 @@ exports.createUser = (req, res, next) => {
         });
 };
 
-exports.setProjectManager = (req, res, next) => {
+exports.setProjectManager = (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         return res.status(400).json({ errors: errors.array() });
     }
 
-    const { userId } = req.body;  // member to promote
-    const companyId = req.userId; // company account ID from JWT
+    const { name } = req.body;      // ✅ user NAME
+    const companyId = req.userId;   // company (CEO) from JWT
 
-    User.findById(userId)
-        .then(user => {
+    User.findOne({
+        name: name,
+        company: companyId
+    })
+        .then((user) => {
             if (!user) {
-                res.status(404).json({ message: 'User not found' });
-                return null; // ✅ stop chain
+                res.status(404).json({ message: "User not found" });
+                return null;
             }
 
-            // Prevent promotion of users from other companies
-            if (!user.company || user.company.toString() !== companyId.toString()) {
-                res.status(403).json({ message: 'Cannot promote a user without a company or from another company' });
-                return null; // ✅ stop chain
-            }
-
-            user.role = 'projectManager';
+            user.role = "projectManager";
             return user.save();
         })
-        .then(updatedUser => {
-            if (!updatedUser) return; // ✅ already responded
+        .then((updatedUser) => {
+            if (!updatedUser) return;
             res.status(200).json({
-                message: 'User promoted to Project Manager',
+                message: "User promoted to Project Manager",
                 user: updatedUser
             });
         })
-        .catch(err => {
-            console.error(err);
+        .catch((err) => {
             if (res.headersSent) return;
             res.status(500).json({ message: err.message });
         });
 };
 
-exports.deleteUser = (req, res, next) => {
+
+exports.deleteUser = (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         return res.status(400).json({ errors: errors.array() });
     }
 
-    const companyId = req.userId; // company account _id from JWT
-    const { userId } = req.body;
+    const companyId = req.userId; // company (CEO) from JWT
+    const { name } = req.body;    // ✅ user NAME
 
-    User.findById(userId)
-        .then(user => {
+    let targetUser = null;
+
+    // 1) Find user by NAME in this company
+    User.findOne({ name: name, company: companyId })
+        .then((user) => {
             if (!user) {
-                res.status(404).json({ message: 'User not found' });
-                return null; // ✅ stop chain
+                res.status(404).json({ message: "User not found" });
+                return null;
             }
 
-            // Ownership check: user must belong to this company
-            if (user.company && user.company.toString() !== companyId.toString()) {
-                res.status(403).json({ message: 'Cannot remove user from another company' });
-                return null; // ✅ stop chain
-            }
+            targetUser = user;
 
-            // Delete tasks assigned to the user
-            return Task.deleteMany({ assignedTo: userId }).then(() => user);
+            // 2) Delete tasks assigned to this user
+            return Task.deleteMany({ assignedTo: user._id, company: companyId })
+                .then(() => user);
         })
-        .then(user => {
-            if (!user) return null; // ✅ already responded
-
-            // Remove user from all teams
-            return Team.updateMany(
-                { members: userId },
-                { $pull: { members: userId } }
-            ).then(() => user);
-        })
-        .then(user => {
+        .then((user) => {
             if (!user) return null;
 
-            // NOTE: after updateMany above, user might no longer be in teams.
-            // Keeping your logic but making it safe:
-            return Team.find({ members: userId }).distinct('_id')
-                .then(teamIds => {
+            // 3) Remove user from all teams
+            return Team.updateMany(
+                { members: user._id, company: companyId },
+                { $pull: { members: user._id } }
+            ).then(() => user);
+        })
+        .then((user) => {
+            if (!user) return null;
+
+            // 4) Remove teams from projects (safe cleanup)
+            return Team.find({ members: user._id }).distinct("_id")
+                .then((teamIds) => {
                     if (teamIds.length === 0) return user;
 
                     return Project.updateMany(
@@ -190,22 +186,24 @@ exports.deleteUser = (req, res, next) => {
                     ).then(() => user);
                 });
         })
-        .then(user => {
+        .then((user) => {
             if (!user) return null;
 
-            // Finally, remove the user
-            return User.findByIdAndDelete(userId);
+            // 5) Finally delete user
+            return User.findByIdAndDelete(user._id);
         })
-        .then(deleted => {
-            if (!deleted) return; // ✅ if we stopped earlier
-            res.status(200).json({ message: 'User deleted successfully along with their tasks and references' });
+        .then((deleted) => {
+            if (!deleted) return;
+            res.status(200).json({
+                message: "User deleted successfully along with tasks and references"
+            });
         })
-        .catch(err => {
-            console.error(err);
+        .catch((err) => {
             if (res.headersSent) return;
             res.status(500).json({ message: err.message });
         });
 };
+
 
 // companyController.deleteProjectAfterClose
 exports.deleteProjectAfterClose = (req, res, next) => {

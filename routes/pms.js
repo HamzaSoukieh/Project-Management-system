@@ -34,43 +34,84 @@ router.post('/project/create',
 );
 
 // Teams
-router.post('/team/create',
+router.post(
+    "/team/create",
     isAuth,
-    checkRole('projectManager'),
+    checkRole("projectManager"),
     [
-        body('name')
-            .notEmpty().withMessage('Team name is required.')
-            .isLength({ max: 100 }).withMessage('Team name can be max 100 characters.'),
-        body('members')
-            .isArray({ min: 1 }).withMessage('Members must be a non-empty array.'),
-        body('projectId')
-            .notEmpty().withMessage('Project ID is required.')
-            .isMongoId().withMessage('Project ID must be a valid Mongo ID.')
+        body("name")
+            .trim()
+            .notEmpty().withMessage("Team name is required.")
+            .isLength({ max: 100 }).withMessage("Team name can be max 100 characters."),
+
+        body("projectName")
+            .trim()
+            .notEmpty().withMessage("Project name is required.")
+            .isLength({ max: 100 }).withMessage("Project name can be max 100 characters."),
+
+        body("members")
+            .isArray({ min: 1 }).withMessage("Members must be a non-empty array.")
+            .custom((arr) => {
+                // ensure all items are strings and not empty
+                const allValid = arr.every(
+                    (m) => typeof m === "string" && m.trim().length > 0
+                );
+                if (!allValid) throw new Error("Each member must be a non-empty name string.");
+                return true;
+            })
+            .custom((arr) => {
+                // prevent duplicate names in request
+                const trimmed = arr.map((m) => m.trim());
+                const set = new Set(trimmed);
+                if (set.size !== trimmed.length) throw new Error("Duplicate members are not allowed.");
+                return true;
+            })
     ],
-    pmsController.createTeam);
+    pmsController.createTeam
+);
 
 // Tasks
-router.post('/task/create',
+router.post(
+    "/task/create",
     isAuth,
-    checkRole('projectManager'),
+    checkRole("projectManager"),
     [
-        body('title')
-            .notEmpty().withMessage('Task title is required.')
-            .isLength({ max: 100 }).withMessage('Task title can be max 100 characters.'),
-        body('description')
+        body("title")
+            .trim()
+            .notEmpty().withMessage("Task title is required.")
+            .isLength({ max: 100 }).withMessage("Task title can be max 100 characters."),
+
+        body("description")
             .optional()
-            .isLength({ max: 500 }).withMessage('Task description can be max 500 characters.'),
-        body('teamId')
-            .notEmpty().withMessage('Team ID is required.')
-            .isMongoId().withMessage('Team ID must be a valid Mongo ID.'),
-        body('assignedTo')
-            .notEmpty().withMessage('Assigned user is required.')
-            .isMongoId().withMessage('Assigned user ID must be a valid Mongo ID.'),
-        body('dueDate')
+            .trim()
+            .isLength({ max: 500 }).withMessage("Task description can be max 500 characters."),
+
+        body("teamName")
+            .trim()
+            .notEmpty().withMessage("Team name is required.")
+            .isLength({ max: 60 }).withMessage("Team name can be max 60 characters."),
+
+        body("assignedToName")
+            .trim()
+            .notEmpty().withMessage("Assigned member name is required.")
+            .isLength({ max: 60 }).withMessage("Member name can be max 60 characters."),
+
+        body("dueDate")
             .optional()
-            .isISO8601().withMessage('Due date must be a valid date.')
+            .isISO8601().withMessage("Due date must be a valid date."),
+
+        body("estimatedHours")
+            .optional()
+            .isNumeric().withMessage("Estimated hours must be a number."),
+
+        body("priority")
+            .optional()
+            .isIn(["low", "medium", "high"])
+            .withMessage("Priority must be low, medium, or high.")
     ],
-    pmsController.createTask);
+    pmsController.createTask
+);
+
 
 router.put(
     '/projects/:projectId/status',

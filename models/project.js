@@ -3,12 +3,26 @@ const { Schema } = mongoose;
 
 const projectSchema = new Schema(
     {
-        name: { type: String, required: true },
+        name: { type: String, required: true, trim: true },
         description: String,
-        status: { type: String, enum: ["active", "completed", "on hold"], default: "active" },
 
-        company: { type: Schema.Types.ObjectId, ref: "User", required: true },
-        projectManager: { type: Schema.Types.ObjectId, ref: "User", required: true },
+        status: {
+            type: String,
+            enum: ["active", "completed", "on hold"],
+            default: "active"
+        },
+
+        company: {
+            type: Schema.Types.ObjectId,
+            ref: "User",
+            required: true
+        },
+
+        projectManager: {
+            type: Schema.Types.ObjectId,
+            ref: "User",
+            required: true
+        },
 
         teams: [{ type: Schema.Types.ObjectId, ref: "Team" }],
 
@@ -16,13 +30,21 @@ const projectSchema = new Schema(
             type: Date,
             default: Date.now
         },
+
         dueDate: {
             type: Date,
             required: true
         }
-
     },
     { timestamps: true }
+);
+
+/**
+ * Unique project name PER company (exact match)
+ */
+projectSchema.index(
+    { company: 1, name: 1 },
+    { unique: true }
 );
 
 module.exports = mongoose.model("Project", projectSchema);

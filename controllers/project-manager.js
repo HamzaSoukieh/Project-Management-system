@@ -34,61 +34,96 @@ exports.createProject = (req, res, next) => {
 };
 
 // Create a new team
-exports.createTeam = (req, res, next) => {
+exports.createTeam = (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, members, projectId } = req.body;
+    const { name, members, projectName } = req.body;
 
-    // Extra check: no duplicate user IDs in team
+    // extra check: duplicate member names
     const uniqueMembers = new Set(members);
     if (uniqueMembers.size !== members.length) {
-        return res.status(400).json({ message: 'Duplicate members are not allowed in the same team.' });
+        return res
+            .status(400)
+            .json({ message: "Duplicate members are not allowed in the same team." });
     }
 
     const pmId = req.userId;
     const companyId = req.companyId;
 
-    Project.findOne({ _id: projectId, projectManager: pmId, company: companyId })
-        .then(project => {
+    let foundProject = null;
+
+    // 1) Find project by NAME
+    Project.findOne({
+        company: companyId,
+        projectManager: pmId,
+        name: projectName
+    })
+        .then((project) => {
             if (!project) {
-                res.status(403).json({ message: 'Project not found or not yours.' });
-                return null; // ✅ stop chain
+                res.status(403).json({ message: "Project not found or not yours." });
+                return null;
             }
 
-            return User.find({ _id: { $in: members }, company: companyId })
-                .then(validMembers => {
-                    if (validMembers.length !== members.length) {
-                        res.status(403).json({ message: 'Some members do not belong to your company.' });
-                        return null; // ✅ stop chain
-                    }
+            foundProject = project;
 
-                    const team = new Team({
-                        name,
-                        members,
-                        projectManager: pmId,
-                        company: companyId,
-                        project: projectId
-                    });
+            // 2) Find users by NAMES
+            return User.find({
+                company: companyId,
+                name: { $in: members }
+            }).select("_id name");
+        })
+        .then((foundUsers) => {
+            if (!foundUsers) return null;
 
-                    return team.save()
-                        .then(team => {
-                            project.teams.push(team._id);
-                            return project.save().then(() => team);
-                        });
-                });
+            if (foundUsers.length !== members.length) {
+                res
+                    .status(403)
+                    .json({ message: "Some members do not belong to your company." });
+                return null;
+            }
+
+            const memberIds = foundUsers.map((u) => u._id);
+
+            // 3) Create team
+            const team = new Team({
+                name,
+                members: memberIds,
+                projectManager: pmId,
+                company: companyId,
+                project: foundProject._id
+            });
+
+            return team.save().then((savedTeam) => {
+                foundProject.teams.push(savedTeam._id);
+                return foundProject.save().then(() => savedTeam);
+            });
         })
-        .then(team => {
-            if (!team) return; // ✅ already responded
-            res.status(201).json({ message: 'Team created successfully', team });
+        .then((team) => {
+            if (!team) return;
+            res.status(201).json({
+                message: "Team created successfully",
+                team
+            });
         })
-        .catch(err => {
+        .catch((err) => {
             if (res.headersSent) return;
+
+            // handle duplicate team name (unique index)
+            if (err && err.code === 11000) {
+                return res.status(400).json({
+                    message: "Duplicate key error",
+                    details: err.keyValue || err.message
+                });
+            }
+
+
             res.status(500).json({ message: err.message });
         });
 };
+
 
 exports.updateProjectStatus = (req, res, next) => {
     const errors = validationResult(req);
@@ -133,35 +168,77 @@ exports.createTask = (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-    const { title, description, teamId, assignedTo, dueDate, estimatedHours, priority } = req.body;
+    const {
+        title,
+        description,
+        teamName,
+        assignedToName,
+        dueDate,
+        estimatedHours,
+        priority
+    } = req.body;
+
     const pmId = req.userId;
     const companyId = req.companyId;
 
-    Team.findOne({ _id: teamId, projectManager: pmId, company: companyId })
-        .select("project members")
+    let foundTeam = null;
+    let foundUser = null;
+
+    // 1) Find team by EXACT name
+    Team.findOne({
+        company: companyId,
+        projectManager: pmId,
+        name: teamName
+    })
+        .select("_id project members")
         .then((team) => {
             if (!team) {
                 res.status(403).json({ message: "Team not found or not yours." });
-                return null; // ✅ stop chain
+                return null;
+            }
+            foundTeam = team;
+
+            // 2) Find user by EXACT name
+            return User.findOne({
+                company: companyId,
+                name: assignedToName
+            }).select("_id");
+        })
+        .then((user) => {
+            if (!user) {
+                if (!res.headersSent)
+                    res.status(404).json({ message: "Member not found." });
+                return null;
             }
 
-            const isMember = team.members.some((m) => String(m) === String(assignedTo));
+            foundUser = user;
+
+            // 3) Check member is in team
+            const isMember = foundTeam.members.some(
+                (m) => String(m) === String(foundUser._id)
+            );
+
             if (!isMember) {
-                res.status(403).json({ message: "Assigned user is not in this team." });
-                return null; // ✅ stop chain
+                res
+                    .status(403)
+                    .json({ message: "Assigned member is not in this team." });
+                return null;
             }
 
+            // 4) Create task
             const task = new Task({
                 title,
                 description,
-                team: teamId,
-                project: team.project,
-                assignedTo,
+                team: foundTeam._id,
+                project: foundTeam.project,
+                assignedTo: foundUser._id,
                 createdBy: pmId,
                 company: companyId,
                 dueDate,
                 estimatedHours: typeof estimatedHours === "number" ? estimatedHours : 0,
-                priority: ["low", "medium", "high"].includes(priority) ? priority : "medium",
+                priority: ["low", "medium", "high"].includes(priority)
+                    ? priority
+                    : "medium",
                 status: "pending",
                 progress: 0
             });
@@ -169,14 +246,18 @@ exports.createTask = (req, res) => {
             return task.save();
         })
         .then((task) => {
-            if (!task) return; // ✅ will be null if we already responded
-            res.status(201).json({ message: "Task created successfully", task });
+            if (!task) return;
+            res.status(201).json({
+                message: "Task created successfully",
+                task
+            });
         })
         .catch((err) => {
             if (res.headersSent) return;
             res.status(500).json({ message: err.message });
         });
 };
+
 
 
 exports.updateTaskByPM = async (req, res) => {
@@ -218,61 +299,122 @@ exports.updateTaskByPM = async (req, res) => {
 
 
 
-exports.editTeam = (req, res, next) => {
+exports.editTeam = (req, res) => {
     const { teamId } = req.params;
-    const { name, membersToAdd, membersToRemove } = req.body;
+    const { newName, membersToAdd, membersToRemove } = req.body;
+
     const pmId = req.userId;
     const companyId = req.companyId;
 
-    Team.findOne({ _id: teamId, projectManager: pmId, company: companyId })
-        .then(team => {
+    let foundTeam = null;
+
+    Team.findOne({
+        _id: teamId,
+        projectManager: pmId,
+        company: companyId
+    })
+        .then((team) => {
             if (!team) {
-                res.status(404).json({ message: 'Team not found or not yours.' });
-                return null; // ✅ stop chain
+                res.status(404).json({ message: "Team not found or not yours." });
+                return null;
             }
+
+            foundTeam = team;
 
             // Rename team
-            if (name) {
-                team.name = name;
+            if (newName) {
+                foundTeam.name = newName;
             }
 
-            // Add members
-            if (Array.isArray(membersToAdd) && membersToAdd.length > 0) {
-                membersToAdd.forEach(member => {
-                    if (!team.members.includes(member)) {
-                        team.members.push(member);
-                    }
+            const addArr = Array.isArray(membersToAdd) ? membersToAdd : [];
+            const removeArr = Array.isArray(membersToRemove) ? membersToRemove : [];
+
+            // ✅ NOTHING to add/remove → just save and STOP
+            if (addArr.length === 0 && removeArr.length === 0) {
+                return foundTeam.save().then((saved) => {
+                    res.status(200).json({
+                        message: "Team updated successfully.",
+                        team: saved
+                    });
+                    return null; // ⛔ stop chain
                 });
             }
 
-            // Remove members and their tasks
-            if (Array.isArray(membersToRemove) && membersToRemove.length > 0) {
-                team.members = team.members.filter(
-                    m => !membersToRemove.includes(m.toString())
-                );
+            // Fetch users by NAME
+            return User.find({
+                company: companyId,
+                name: { $in: [...addArr, ...removeArr] }
+            }).select("_id name");
+        })
+        .then((users) => {
+            if (!users) return null; // chain already handled
 
-                // Delete all tasks assigned to the removed members in this team
-                return Task.deleteMany({
-                    assignedTo: { $in: membersToRemove },
-                    team: teamId,
-                    company: companyId
-                }).then(() => team.save());
+            const addArr = Array.isArray(membersToAdd) ? membersToAdd : [];
+            const removeArr = Array.isArray(membersToRemove) ? membersToRemove : [];
+
+            const userMap = new Map(users.map((u) => [u.name, u]));
+
+            // Validate names
+            const missingAdd = addArr.filter((n) => !userMap.has(n));
+            const missingRemove = removeArr.filter((n) => !userMap.has(n));
+
+            if (missingAdd.length || missingRemove.length) {
+                res.status(404).json({
+                    message: "Some member names were not found in your company.",
+                    missingAdd,
+                    missingRemove
+                });
+                return null;
             }
 
-            return team.save();
+            // Add members
+            addArr.forEach((name) => {
+                const user = userMap.get(name);
+                const exists = foundTeam.members.some(
+                    (m) => String(m) === String(user._id)
+                );
+                if (!exists) foundTeam.members.push(user._id);
+            });
+
+            // Remove members
+            const removeIds = removeArr.map((n) =>
+                String(userMap.get(n)._id)
+            );
+
+            if (removeIds.length > 0) {
+                foundTeam.members = foundTeam.members.filter(
+                    (m) => !removeIds.includes(String(m))
+                );
+
+                return Task.deleteMany({
+                    assignedTo: { $in: removeIds },
+                    team: foundTeam._id,
+                    company: companyId
+                }).then(() => foundTeam.save());
+            }
+
+            return foundTeam.save();
         })
-        .then(updatedTeam => {
-            if (!updatedTeam) return; // ✅ already responded
+        .then((updatedTeam) => {
+            if (!updatedTeam) return;
             res.status(200).json({
-                message: 'Team updated successfully.',
+                message: "Team updated successfully.",
                 team: updatedTeam
             });
         })
-        .catch(err => {
+        .catch((err) => {
             if (res.headersSent) return;
+
+            if (err.code === 11000) {
+                return res
+                    .status(400)
+                    .json({ message: "Team name already exists in this company." });
+            }
+
             res.status(500).json({ message: err.message });
         });
 };
+
 
 exports.closeProject = (req, res, next) => {
     const projectId = req.params.projectId;
