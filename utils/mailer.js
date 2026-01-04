@@ -102,3 +102,44 @@ exports.sendCompanyInviteEmail = (to, data) => {
     `
     });
 };
+
+exports.sendReportCreatedEmail = ({ to, companyName, projectName, teamName, memberName, reportTitle, reportDescription, reportLink }) => {
+    const recipients = Array.isArray(to) ? to.filter(Boolean) : [to].filter(Boolean);
+
+    if (!recipients.length) return Promise.resolve(); // no recipients -> skip safely
+
+    return transporter.sendMail({
+        from: process.env.EMAIL_FROM,
+        to: recipients.join(","),
+        subject: `New report created: ${reportTitle}`,
+        html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+        <h2>New Report Created</h2>
+
+        <p><strong>${memberName}</strong> created a new report in <strong>${companyName}</strong>.</p>
+
+        <ul>
+          ${projectName ? `<li><strong>Project:</strong> ${projectName}</li>` : ""}
+          ${teamName ? `<li><strong>Team:</strong> ${teamName}</li>` : ""}
+          <li><strong>Title:</strong> ${reportTitle}</li>
+          ${reportDescription ? `<li><strong>Description:</strong> ${reportDescription}</li>` : ""}
+        </ul>
+
+        ${reportLink ? `
+          <p style="margin: 20px 0;">
+            <a href="${reportLink}"
+               style="background:#111827;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none;display:inline-block;">
+              View Report
+            </a>
+          </p>
+        ` : ""}
+
+        <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
+
+        <p style="color:#6b7280;font-size:12px;">
+          This is an automated notification.
+        </p>
+      </div>
+    `
+    });
+};

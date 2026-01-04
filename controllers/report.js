@@ -1,45 +1,102 @@
 const { validationResult } = require('express-validator');
-const Report = require('../models/report');
-const Project = require('../models/project');
-const Team = require('../models/team');
+const Report = require("../models/report");
+const User = require("../models/user");
+const Team = require("../models/team");
+const Project = require("../models/project");
 const fs = require('fs');
 const path = require('path');
 
-exports.createReport = (req, res, next) => {
-    const { title, description, teamId, projectId } = req.body;
-    const memberId = req.userId;
-    const companyId = req.companyId;
+const { sendReportCreatedEmail } = require("../utils/mailer");
 
-    let fileUrl = null;
-    let fileType = null;
+exports.createReport = async (req, res) => {
+    try {
+        const { title, description, teamName, projectName } = req.body;
 
-    if (req.file) {
-        fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
-        fileType = req.file.mimetype;
-    }
+        const memberId = req.userId;
+        const companyId = req.companyId; // CEO/company user id from JWT
 
-    const report = new Report({
-        title,
-        description,
-        fileUrl,
-        fileType,
-        createdBy: memberId,
-        team: teamId,
-        project: projectId,
-        company: companyId
-    });
+        // 1) Find project by name in THIS company
+        const project = await Project.findOne({
+            name: projectName,
+            company: companyId,
+        }).select("_id name");
 
-    report.save()
-        .then(newReport => {
-            res.status(201).json({
-                message: 'Report created successfully',
-                report: newReport
-            });
-        })
-        .catch(err => {
-            if (res.headersSent) return;
-            res.status(500).json({ message: err.message });
+        if (!project) {
+            return res.status(404).json({ message: "Project not found in this company." });
+        }
+
+        // 2) Find team by name in THIS company and linked to the project
+        const team = await Team.findOne({
+            name: teamName,
+            company: companyId,
+            project: project._id,
+        }).select("_id name projectManager company");
+
+        if (!team) {
+            return res.status(404).json({ message: "Team not found in this project/company." });
+        }
+
+        // 3) File handling (pdf)
+        let fileUrl = null;
+        let fileType = null;
+        if (req.file) {
+            fileUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+            fileType = req.file.mimetype;
+        }
+
+        // 4) Save report (schema needs ids)
+        const report = new Report({
+            title,
+            description,
+            fileUrl,
+            fileType,
+            createdBy: memberId,
+            team: team._id,
+            project: project._id,
+            company: team.company, // use team.company (same as companyId)
         });
+
+        const newReport = await report.save();
+
+        // 5) Respond immediately
+        res.status(201).json({
+            message: "Report created successfully",
+            report: newReport,
+        });
+
+        // 6) Notify CEO + PM responsible for this team (team.projectManager)
+        try {
+            const [member, ceo, pm] = await Promise.all([
+                User.findById(memberId).select("name email"),
+                User.findById(team.company).select("name email"),
+                User.findById(team.projectManager).select("name email"),
+            ]);
+
+            const recipients = [ceo?.email, pm?.email].filter(Boolean);
+
+            if (recipients.length) {
+                const reportLink = process.env.FRONTEND_URL
+                    ? `${process.env.FRONTEND_URL}/reports/${newReport._id}`
+                    : null;
+
+                await sendReportCreatedEmail({
+                    to: recipients,
+                    companyName: ceo?.name || "Company",
+                    projectName: project.name,
+                    teamName: team.name,
+                    memberName: member?.name || "A member",
+                    reportTitle: newReport.title,
+                    reportDescription: newReport.description || "",
+                    reportLink,
+                });
+            }
+        } catch (emailErr) {
+            console.error("Report notification email failed:", emailErr.message);
+        }
+    } catch (err) {
+        if (res.headersSent) return;
+        res.status(500).json({ message: err.message });
+    }
 };
 
 exports.deleteReportByPm = (req, res, next) => {

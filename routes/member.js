@@ -11,15 +11,15 @@ const express = require('express');
 const router = express.Router();
 
 router.post(
-    '/reports',
+    "/reports",
     isAuth,
-    checkRole('member'),
+    checkRole("member"),
     uploadReport,
     [
-        body('title').notEmpty().withMessage('Title is required'),
-        body('description').optional(),
-        body('teamId').notEmpty().withMessage('teamId required'),
-        body('projectId').notEmpty().withMessage('projectId required')
+        body("title").notEmpty().withMessage("Title is required"),
+        body("description").optional(),
+        body("teamName").notEmpty().withMessage("teamName is required"),
+        body("projectName").notEmpty().withMessage("projectName is required"),
     ],
     checkProjectOpen,
     reportController.createReport
