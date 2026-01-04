@@ -5,7 +5,7 @@ const Task = require('../models/task');
 const Team = require('../models/team');
 const Company = require('../models/company');
 const Project = require('../models/project');
-const { sendVerificationEmail } = require('../utils/mailer');
+const { sendVerificationEmail, sendCompanyInviteEmail } = require('../utils/mailer');
 const { validationResult } = require('express-validator');
 
 exports.createCompany = (req, res, next) => {
@@ -54,53 +54,69 @@ exports.createCompany = (req, res, next) => {
         });
 };
 
-exports.createUser = (req, res, next) => {
+exports.createUser = (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         return res.status(400).json({ errors: errors.array() });
     }
 
-    const companyId = req.userId; // from isAuth
+    const companyId = req.userId; // company/CEO id from JWT
     const { name, email, password, role } = req.body;
 
-    User.findOne({ email })
-        .then(existingUser => {
-            if (existingUser) {
-                res.status(400).json({ message: 'Email already registered' });
-                return null; // ✅ stop chain
-            }
+    let inviterName = "Company Admin";
+
+    // 1) Get inviter name
+    User.findById(companyId).select("name")
+        .then((companyUser) => {
+            if (companyUser?.name) inviterName = companyUser.name;
+
+            // 2) Hash the PROVIDED password (plain)
             return bcrypt.hash(password, 12);
         })
-        .then(hashedPassword => {
-            if (!hashedPassword) return null; // ✅ already responded above
-
-            const emailToken = crypto.randomBytes(32).toString('hex');
-            const emailTokenExpires = Date.now() + 3600000; // 1 hour
-
+        .then((hashedPassword) => {
+            // 3) Create user with hashed password
             const user = new User({
                 name,
                 email,
-                password: hashedPassword,
-                role: role || 'member',
+                password: hashedPassword, // ✅ hashed in DB
+                role: role || "member",
                 company: companyId,
-                isVerified: false,
-                emailToken,
-                emailTokenExpires
+                isVerified: true,
             });
 
-            // IMPORTANT: don't send response inside here; return something and respond in the next .then
-            return user.save()
-                .then(saved => sendVerificationEmail(saved.email, emailToken).then(() => saved));
+            return user.save();
         })
-        .then(savedUser => {
-            if (!savedUser) return; // ✅ already responded
-            res.status(201).json({ message: 'User created. Verification email sent.' });
+        .then((savedUser) => {
+            // 4) Send email with PLAIN password
+            const loginLink = `${process.env.FRONTEND_URL}/login`;
+
+            return sendCompanyInviteEmail(savedUser.email, {
+                inviteeName: savedUser.name,
+                companyName: process.env.COMPANY_NAME || "Your Company",
+                inviterName,
+                role: savedUser.role,
+                loginLink,
+                password, // ✅ plain password emailed
+            });
         })
-        .catch(err => {
+        .then(() => {
+            res.status(201).json({
+                message: "User created successfully. Credentials sent by email.",
+            });
+        })
+        .catch((err) => {
             if (res.headersSent) return;
+
+            if (err.code === 11000) {
+                return res.status(400).json({
+                    message: "Name or email already exists.",
+                });
+            }
+
             res.status(500).json({ message: err.message });
         });
 };
+
 
 exports.setProjectManager = (req, res) => {
     const errors = validationResult(req);

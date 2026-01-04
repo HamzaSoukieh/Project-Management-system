@@ -1,16 +1,20 @@
 const express = require('express');
 const router = express.Router();
 
+const { body } = require('express-validator'); // ✅ ONLY HERE
+
 const companyReports = require('../controllers/report');
 const companyController = require('../controllers/company');
 const trackinController = require('../controllers/trackingController');
+const authController = require('../controllers/auth');
 
 const checkRole = require('../middleware/checkRole');
-const isAuth = require('../middleware/is_auth'); // JWT middleware
-const { body } = require('express-validator');
-
-
+const isAuth = require('../middleware/is_auth');
 const checkProjectOpen = require('../middleware/checkProjectOpen');
+
+const User = require("../models/user"); // adjust path if needed
+
+
 
 router.post(
     '/create-company',
@@ -31,22 +35,47 @@ router.post(
 );
 
 router.post(
-    '/create-user',
+    "/create-user",
     isAuth,
-    checkRole('company'),
+    checkRole("company"),
     [
-        body('name')
-            .notEmpty().withMessage('Name is required.')
-            .isLength({ max: 100 }).withMessage('Name can be max 100 characters.'),
-        body('email')
-            .notEmpty().withMessage('Email is required.')
-            .isEmail().withMessage('Email must be valid.'),
-        body('password')
-            .notEmpty().withMessage('Password is required.')
-            .isLength({ min: 6 }).withMessage('Password must be at least 6 characters.'),
-        body('role')
+        body("name")
+            .trim()
+            .notEmpty().withMessage("Name is required.")
+            .bail()
+            .isLength({ min: 2, max: 100 }).withMessage("Name must be between 2 and 100 characters.")
+            .bail()
+            .custom((value, { req }) => {
+                // unique per company
+                return User.findOne({ name: value, company: req.userId }).then((user) => {
+                    if (user) return Promise.reject("Name already exists in this company.");
+                });
+            }),
+
+        body("email")
+            .trim()
+            .notEmpty().withMessage("Email is required.")
+            .bail()
+            .isEmail().withMessage("Email must be valid.")
+            .bail()
+            .customSanitizer((value) => value.toLowerCase())
+            .custom((value) => {
+                // global unique email
+                return User.findOne({ email: value }).then((user) => {
+                    if (user) return Promise.reject("Email already registered.");
+                });
+            }),
+
+        body("role")
             .optional()
-            .isIn(['member', 'projectManager']).withMessage('Role must be member or projectManager.')
+            .trim()
+            .isIn(["member", "projectManager"])
+            .withMessage("Role must be member or projectManager."),
+        body("password")
+            .notEmpty().withMessage("Password is required.")
+            .bail()
+            .isLength({ min: 6 }).withMessage("Password must be at least 6 characters."),
+
     ],
     companyController.createUser
 );

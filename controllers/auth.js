@@ -213,3 +213,44 @@ exports.postNewPassword = (req, res, next) => {
             next(err);
         });
 };
+
+exports.acceptInvite = (req, res) => {
+    const { token } = req.params;
+    const { password } = req.body;
+
+    if (!token) {
+        return res.status(400).json({ message: "Invitation token is required." });
+    }
+
+    User.findOne({
+        emailToken: token,
+        emailTokenExpires: { $gt: Date.now() },
+        isVerified: false
+    })
+        .then((user) => {
+            if (!user) {
+                return res
+                    .status(400)
+                    .json({ message: "Invalid or expired invitation link." });
+            }
+
+            return bcrypt.hash(password, 12).then((hashedPassword) => {
+                user.password = hashedPassword;
+                user.isVerified = true;
+
+                // one-time use
+                user.emailToken = undefined;
+                user.emailTokenExpires = undefined;
+
+                return user.save();
+            });
+        })
+        .then(() => {
+            res.status(200).json({
+                message: "Invitation accepted successfully. You can now log in."
+            });
+        })
+        .catch((err) => {
+            res.status(500).json({ message: err.message });
+        });
+};
