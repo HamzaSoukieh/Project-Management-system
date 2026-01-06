@@ -60,13 +60,11 @@ router.post(
 
 // Reset password using token
 router.post(
-    '/new-password',
+    '/reset-password/:token',
     body('password')
         .isLength({ min: 6 })
         .withMessage('Password must be at least 6 characters long.'),
-    body('token').notEmpty().withMessage('Token is required'),
     authController.postNewPassword
 );
-
 
 module.exports = router;

@@ -133,7 +133,7 @@ exports.login = (req, res, next) => {
 exports.postReset = (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-        const error = new Error('Validation failed');
+        const error = new Error("Validation failed");
         error.statusCode = 422;
         error.data = errors.array();
         return next(error);
@@ -145,23 +145,27 @@ exports.postReset = (req, res, next) => {
             return next(err);
         }
 
-        const token = buffer.toString('hex');
+        const token = buffer.toString("hex");
 
         User.findOne({ email: req.body.email })
             .then(user => {
                 if (!user) {
-                    const error = new Error('No account with that email found.');
+                    const error = new Error("No account with that email found.");
                     error.statusCode = 404;
                     throw error;
                 }
 
                 user.resetToken = token;
-                user.resetTokenExpiration = Date.now() + 3600000;
+                user.resetTokenExpiration = Date.now() + 3600000; // 1 hour
                 return user.save();
             })
-            .then(user => sendResetEmail(user.email, token))
+            .then(user => {
+                // IMPORTANT: put correct frontend URL here
+                const resetLink = `${process.env.FRONTEND_URL}/reset-password/${token}`;
+                return sendResetEmail(user.email, resetLink);
+            })
             .then(() => {
-                res.status(200).json({ message: 'Password reset email sent.' });
+                res.status(200).json({ message: "Password reset email sent." });
             })
             .catch(err => {
                 if (res.headersSent) return;
@@ -171,27 +175,28 @@ exports.postReset = (req, res, next) => {
     });
 };
 
+
 // Reset password using token
 exports.postNewPassword = (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-        const error = new Error('Validation failed');
+        const error = new Error("Validation failed");
         error.statusCode = 422;
         error.data = errors.array();
         return next(error);
     }
 
     const newPassword = req.body.password;
-    const passwordToken = req.body.token;
+    const passwordToken = req.params.token; // <-- FIX HERE
     let resetUser;
 
     User.findOne({
         resetToken: passwordToken,
-        resetTokenExpiration: { $gt: Date.now() }
+        resetTokenExpiration: { $gt: Date.now() },
     })
         .then(user => {
             if (!user) {
-                const error = new Error('Invalid or expired token.');
+                const error = new Error("Invalid or expired token.");
                 error.statusCode = 400;
                 throw error;
             }
@@ -205,52 +210,11 @@ exports.postNewPassword = (req, res, next) => {
             return resetUser.save();
         })
         .then(() => {
-            res.status(200).json({ message: 'Password has been reset successfully.' });
+            res.status(200).json({ message: "Password has been reset successfully." });
         })
         .catch(err => {
             if (res.headersSent) return;
             if (!err.statusCode) err.statusCode = 500;
             next(err);
-        });
-};
-
-exports.acceptInvite = (req, res) => {
-    const { token } = req.params;
-    const { password } = req.body;
-
-    if (!token) {
-        return res.status(400).json({ message: "Invitation token is required." });
-    }
-
-    User.findOne({
-        emailToken: token,
-        emailTokenExpires: { $gt: Date.now() },
-        isVerified: false
-    })
-        .then((user) => {
-            if (!user) {
-                return res
-                    .status(400)
-                    .json({ message: "Invalid or expired invitation link." });
-            }
-
-            return bcrypt.hash(password, 12).then((hashedPassword) => {
-                user.password = hashedPassword;
-                user.isVerified = true;
-
-                // one-time use
-                user.emailToken = undefined;
-                user.emailTokenExpires = undefined;
-
-                return user.save();
-            });
-        })
-        .then(() => {
-            res.status(200).json({
-                message: "Invitation accepted successfully. You can now log in."
-            });
-        })
-        .catch((err) => {
-            res.status(500).json({ message: err.message });
         });
 };
