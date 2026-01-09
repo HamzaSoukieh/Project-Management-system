@@ -18,8 +18,14 @@ router.post(
     [
         body("title").notEmpty().withMessage("Title is required"),
         body("description").optional(),
-        body("teamName").notEmpty().withMessage("teamName is required"),
-        body("projectName").notEmpty().withMessage("projectName is required"),
+
+        body("teamId")
+            .isMongoId()
+            .withMessage("Valid teamId is required"),
+
+        body("projectId")
+            .isMongoId()
+            .withMessage("Valid projectId is required"),
     ],
     checkProjectOpen,
     reportController.createReport

@@ -85,10 +85,9 @@ router.put(
     isAuth,
     checkRole("company"),
     [
-        body("name")
-            .trim()
-            .notEmpty().withMessage("User name is required.")
-            .isLength({ max: 100 }).withMessage("User name can be max 100 characters.")
+        body("userId")
+            .isMongoId()
+            .withMessage("Valid userId is required.")
     ],
     companyController.setProjectManager
 );
@@ -98,10 +97,9 @@ router.delete(
     isAuth,
     checkRole("company"),
     [
-        body("name")
-            .trim()
-            .notEmpty().withMessage("User name is required.")
-            .isLength({ max: 100 }).withMessage("User name can be max 100 characters.")
+        body("userId")
+            .isMongoId()
+            .withMessage("Valid userId is required.")
     ],
     companyController.deleteUser
 );

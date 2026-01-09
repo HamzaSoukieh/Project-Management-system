@@ -10,14 +10,14 @@ const { sendReportCreatedEmail } = require("../utils/mailer");
 
 exports.createReport = async (req, res) => {
     try {
-        const { title, description, teamName, projectName } = req.body;
+        const { title, description, teamId, projectId } = req.body;
 
         const memberId = req.userId;
         const companyId = req.companyId; // CEO/company user id from JWT
 
-        // 1) Find project by name in THIS company
+        // 1) Find project by ID in THIS company
         const project = await Project.findOne({
-            name: projectName,
+            _id: projectId,
             company: companyId,
         }).select("_id name");
 
@@ -25,15 +25,22 @@ exports.createReport = async (req, res) => {
             return res.status(404).json({ message: "Project not found in this company." });
         }
 
-        // 2) Find team by name in THIS company and linked to the project
+        // 2) Find team by ID in THIS company and linked to the project
         const team = await Team.findOne({
-            name: teamName,
+            _id: teamId,
             company: companyId,
             project: project._id,
         }).select("_id name projectManager company");
 
         if (!team) {
             return res.status(404).json({ message: "Team not found in this project/company." });
+        }
+
+        // (optional but recommended) ensure member belongs to this team
+        // if you already have another middleware, you can remove this block
+        const isMember = await Team.exists({ _id: team._id, members: memberId });
+        if (!isMember) {
+            return res.status(403).json({ message: "You are not a member of this team." });
         }
 
         // 3) File handling (pdf)
@@ -53,7 +60,7 @@ exports.createReport = async (req, res) => {
             createdBy: memberId,
             team: team._id,
             project: project._id,
-            company: team.company, // use team.company (same as companyId)
+            company: team.company, // same as companyId
         });
 
         const newReport = await report.save();
@@ -98,6 +105,7 @@ exports.createReport = async (req, res) => {
         res.status(500).json({ message: err.message });
     }
 };
+
 
 exports.deleteReportByPm = (req, res, next) => {
     const reportId = req.params.reportId;

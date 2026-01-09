@@ -40,9 +40,9 @@ exports.createTeam = (req, res) => {
         return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name, members, projectName } = req.body;
+    const { name, members, projectId } = req.body;
 
-    // extra check: duplicate member names
+    // extra check: duplicate member IDs
     const uniqueMembers = new Set(members);
     if (uniqueMembers.size !== members.length) {
         return res
@@ -55,11 +55,11 @@ exports.createTeam = (req, res) => {
 
     let foundProject = null;
 
-    // 1) Find project by NAME
+    // 1) Find project by ID
     Project.findOne({
+        _id: projectId,
         company: companyId,
-        projectManager: pmId,
-        name: projectName
+        projectManager: pmId
     })
         .then((project) => {
             if (!project) {
@@ -69,28 +69,26 @@ exports.createTeam = (req, res) => {
 
             foundProject = project;
 
-            // 2) Find users by NAMES
+            // 2) Validate users by IDS (same company)
             return User.find({
-                company: companyId,
-                name: { $in: members }
-            }).select("_id name");
+                _id: { $in: members },
+                company: companyId
+            }).select("_id");
         })
         .then((foundUsers) => {
             if (!foundUsers) return null;
 
             if (foundUsers.length !== members.length) {
-                res
-                    .status(403)
-                    .json({ message: "Some members do not belong to your company." });
+                res.status(403).json({
+                    message: "Some members do not belong to your company."
+                });
                 return null;
             }
-
-            const memberIds = foundUsers.map((u) => u._id);
 
             // 3) Create team
             const team = new Team({
                 name,
-                members: memberIds,
+                members, // already IDs
                 projectManager: pmId,
                 company: companyId,
                 project: foundProject._id
@@ -111,7 +109,6 @@ exports.createTeam = (req, res) => {
         .catch((err) => {
             if (res.headersSent) return;
 
-            // handle duplicate team name (unique index)
             if (err && err.code === 11000) {
                 return res.status(400).json({
                     message: "Duplicate key error",
@@ -119,10 +116,11 @@ exports.createTeam = (req, res) => {
                 });
             }
 
-
             res.status(500).json({ message: err.message });
         });
 };
+
+
 
 
 exports.updateProjectStatus = (req, res, next) => {
@@ -171,24 +169,23 @@ exports.createTask = (req, res) => {
     const {
         title,
         description,
-        teamName,
-        assignedToName,
+        teamId,
+        assignedToId,
         dueDate,
         estimatedHours,
-        priority
+        priority,
     } = req.body;
 
     const pmId = req.userId;
     const companyId = req.companyId;
 
     let foundTeam = null;
-    let foundUser = null;
 
-    // 1) Find team by EXACT name
+    // 1) Find team by ID (must be in same company + owned by PM)
     Team.findOne({
+        _id: teamId,
         company: companyId,
         projectManager: pmId,
-        name: teamName
     })
         .select("_id project members")
         .then((team) => {
@@ -196,12 +193,13 @@ exports.createTask = (req, res) => {
                 res.status(403).json({ message: "Team not found or not yours." });
                 return null;
             }
+
             foundTeam = team;
 
-            // 2) Find user by EXACT name
+            // 2) Find user by ID (must belong to same company)
             return User.findOne({
+                _id: assignedToId,
                 company: companyId,
-                name: assignedToName
             }).select("_id");
         })
         .then((user) => {
@@ -211,17 +209,13 @@ exports.createTask = (req, res) => {
                 return null;
             }
 
-            foundUser = user;
-
             // 3) Check member is in team
             const isMember = foundTeam.members.some(
-                (m) => String(m) === String(foundUser._id)
+                (m) => String(m) === String(user._id)
             );
 
             if (!isMember) {
-                res
-                    .status(403)
-                    .json({ message: "Assigned member is not in this team." });
+                res.status(403).json({ message: "Assigned member is not in this team." });
                 return null;
             }
 
@@ -231,16 +225,14 @@ exports.createTask = (req, res) => {
                 description,
                 team: foundTeam._id,
                 project: foundTeam.project,
-                assignedTo: foundUser._id,
+                assignedTo: user._id,
                 createdBy: pmId,
                 company: companyId,
                 dueDate,
                 estimatedHours: typeof estimatedHours === "number" ? estimatedHours : 0,
-                priority: ["low", "medium", "high"].includes(priority)
-                    ? priority
-                    : "medium",
+                priority: ["low", "medium", "high"].includes(priority) ? priority : "medium",
                 status: "pending",
-                progress: 0
+                progress: 0,
             });
 
             return task.save();
@@ -249,7 +241,7 @@ exports.createTask = (req, res) => {
             if (!task) return;
             res.status(201).json({
                 message: "Task created successfully",
-                task
+                task,
             });
         })
         .catch((err) => {
@@ -257,6 +249,7 @@ exports.createTask = (req, res) => {
             res.status(500).json({ message: err.message });
         });
 };
+
 
 
 
@@ -269,7 +262,7 @@ exports.updateTaskByPM = async (req, res) => {
         const companyId = req.companyId;
         const pmId = req.userId;
 
-        const { assignedToName } = req.body;
+        const { assignedToId } = req.body;
 
         // 1) Load task (company scoped)
         const task = await Task.findOne({ _id: taskId, company: companyId });
@@ -281,18 +274,18 @@ exports.updateTaskByPM = async (req, res) => {
         const isPmOfTeam = await Team.exists({
             _id: task.team,
             company: companyId,
-            projectManager: pmId
+            projectManager: pmId,
         });
 
         if (!isPmOfTeam) {
             return res.status(403).json({ message: "Not allowed." });
         }
 
-        // 3) If assignedToName is provided → resolve by NAME
-        if (assignedToName !== undefined) {
+        // 3) If assignedToId is provided → resolve by ID (NOT name)
+        if (assignedToId !== undefined) {
             const user = await User.findOne({
-                name: assignedToName,
-                company: companyId
+                _id: assignedToId,
+                company: companyId,
             }).select("_id");
 
             if (!user) {
@@ -302,13 +295,11 @@ exports.updateTaskByPM = async (req, res) => {
             // ensure user is in the same team
             const isMember = await Team.exists({
                 _id: task.team,
-                members: user._id
+                members: user._id,
             });
 
             if (!isMember) {
-                return res
-                    .status(403)
-                    .json({ message: "Assigned user is not in this team." });
+                return res.status(403).json({ message: "Assigned user is not in this team." });
             }
 
             task.assignedTo = user._id;
@@ -322,7 +313,7 @@ exports.updateTaskByPM = async (req, res) => {
             "status",
             "progress",
             "estimatedHours",
-            "priority"
+            "priority",
         ];
 
         for (const key of allowed) {
@@ -335,14 +326,12 @@ exports.updateTaskByPM = async (req, res) => {
 
         return res.status(200).json({
             message: "Task updated successfully",
-            task
+            task,
         });
     } catch (err) {
         return res.status(500).json({ message: err.message });
     }
 };
-
-
 
 
 exports.editTeam = (req, res) => {
@@ -357,7 +346,7 @@ exports.editTeam = (req, res) => {
     Team.findOne({
         _id: teamId,
         projectManager: pmId,
-        company: companyId
+        company: companyId,
     })
         .then((team) => {
             if (!team) {
@@ -380,17 +369,19 @@ exports.editTeam = (req, res) => {
                 return foundTeam.save().then((saved) => {
                     res.status(200).json({
                         message: "Team updated successfully.",
-                        team: saved
+                        team: saved,
                     });
                     return null; // ⛔ stop chain
                 });
             }
 
-            // Fetch users by NAME
+            // ✅ Fetch users by IDS (not names) and same company
+            const idsToCheck = [...new Set([...addArr, ...removeArr])];
+
             return User.find({
                 company: companyId,
-                name: { $in: [...addArr, ...removeArr] }
-            }).select("_id name");
+                _id: { $in: idsToCheck },
+            }).select("_id");
         })
         .then((users) => {
             if (!users) return null; // chain already handled
@@ -398,44 +389,40 @@ exports.editTeam = (req, res) => {
             const addArr = Array.isArray(membersToAdd) ? membersToAdd : [];
             const removeArr = Array.isArray(membersToRemove) ? membersToRemove : [];
 
-            const userMap = new Map(users.map((u) => [u.name, u]));
+            // Validate IDs exist in company
+            const foundIds = new Set(users.map((u) => String(u._id)));
 
-            // Validate names
-            const missingAdd = addArr.filter((n) => !userMap.has(n));
-            const missingRemove = removeArr.filter((n) => !userMap.has(n));
+            const missingAdd = addArr.filter((id) => !foundIds.has(String(id)));
+            const missingRemove = removeArr.filter((id) => !foundIds.has(String(id)));
 
             if (missingAdd.length || missingRemove.length) {
                 res.status(404).json({
-                    message: "Some member names were not found in your company.",
+                    message: "Some member IDs were not found in your company.",
                     missingAdd,
-                    missingRemove
+                    missingRemove,
                 });
                 return null;
             }
 
             // Add members
-            addArr.forEach((name) => {
-                const user = userMap.get(name);
-                const exists = foundTeam.members.some(
-                    (m) => String(m) === String(user._id)
-                );
-                if (!exists) foundTeam.members.push(user._id);
+            addArr.forEach((id) => {
+                const exists = foundTeam.members.some((m) => String(m) === String(id));
+                if (!exists) foundTeam.members.push(id);
             });
 
             // Remove members
-            const removeIds = removeArr.map((n) =>
-                String(userMap.get(n)._id)
-            );
+            const removeIds = removeArr.map((id) => String(id));
 
             if (removeIds.length > 0) {
                 foundTeam.members = foundTeam.members.filter(
                     (m) => !removeIds.includes(String(m))
                 );
 
+                // delete tasks assigned to removed members (same as your logic)
                 return Task.deleteMany({
                     assignedTo: { $in: removeIds },
                     team: foundTeam._id,
-                    company: companyId
+                    company: companyId,
                 }).then(() => foundTeam.save());
             }
 
@@ -445,7 +432,7 @@ exports.editTeam = (req, res) => {
             if (!updatedTeam) return;
             res.status(200).json({
                 message: "Team updated successfully.",
-                team: updatedTeam
+                team: updatedTeam,
             });
         })
         .catch((err) => {
@@ -460,6 +447,7 @@ exports.editTeam = (req, res) => {
             res.status(500).json({ message: err.message });
         });
 };
+
 
 
 exports.closeProject = (req, res, next) => {

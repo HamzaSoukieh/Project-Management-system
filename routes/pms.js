@@ -4,7 +4,7 @@ const pmsController = require('../controllers/project-manager');
 const trackingController = require('../controllers/trackingController');
 const isAuth = require('../middleware/is_auth');
 const checkRole = require('../middleware/checkRole');
-const { body } = require('express-validator');
+const { body, param } = require('express-validator');
 const sendProjectClosedEmail = require('../utils/mailer');
 const reportController = require('../controllers/report');
 
@@ -44,26 +44,25 @@ router.post(
             .notEmpty().withMessage("Team name is required.")
             .isLength({ max: 100 }).withMessage("Team name can be max 100 characters."),
 
-        body("projectName")
-            .trim()
-            .notEmpty().withMessage("Project name is required.")
-            .isLength({ max: 100 }).withMessage("Project name can be max 100 characters."),
+        body("projectId")
+            .isMongoId()
+            .withMessage("Valid projectId is required."),
 
         body("members")
-            .isArray({ min: 1 }).withMessage("Members must be a non-empty array.")
+            .isArray({ min: 1 })
+            .withMessage("Members must be a non-empty array of user IDs.")
             .custom((arr) => {
-                // ensure all items are strings and not empty
                 const allValid = arr.every(
-                    (m) => typeof m === "string" && m.trim().length > 0
+                    (id) => /^[0-9a-fA-F]{24}$/.test(id)
                 );
-                if (!allValid) throw new Error("Each member must be a non-empty name string.");
+                if (!allValid) throw new Error("Each member must be a valid userId.");
                 return true;
             })
             .custom((arr) => {
-                // prevent duplicate names in request
-                const trimmed = arr.map((m) => m.trim());
-                const set = new Set(trimmed);
-                if (set.size !== trimmed.length) throw new Error("Duplicate members are not allowed.");
+                const set = new Set(arr);
+                if (set.size !== arr.length) {
+                    throw new Error("Duplicate members are not allowed.");
+                }
                 return true;
             })
     ],
@@ -86,15 +85,13 @@ router.post(
             .trim()
             .isLength({ max: 500 }).withMessage("Task description can be max 500 characters."),
 
-        body("teamName")
-            .trim()
-            .notEmpty().withMessage("Team name is required.")
-            .isLength({ max: 60 }).withMessage("Team name can be max 60 characters."),
+        body("teamId")
+            .isMongoId()
+            .withMessage("Valid teamId is required."),
 
-        body("assignedToName")
-            .trim()
-            .notEmpty().withMessage("Assigned member name is required.")
-            .isLength({ max: 60 }).withMessage("Member name can be max 60 characters."),
+        body("assignedToId")
+            .isMongoId()
+            .withMessage("Valid assignedToId is required."),
 
         body("dueDate")
             .optional()
@@ -102,7 +99,8 @@ router.post(
 
         body("estimatedHours")
             .optional()
-            .isNumeric().withMessage("Estimated hours must be a number."),
+            .isNumeric().withMessage("Estimated hours must be a number.")
+            .toFloat(),
 
         body("priority")
             .optional()
@@ -126,26 +124,59 @@ router.put(
 );
 
 router.put(
-    '/tasks/:taskId',
+    "/tasks/:taskId",
     isAuth,
-    checkRole('projectManager'),   // only PM can access
+    checkRole("projectManager"),
     [
-        body('title').optional().isLength({ min: 1 }).withMessage('Title cannot be empty.'),
-        body('status').optional().isIn(['pending', 'in progress', 'completed']).withMessage('Invalid status value.'),
-        body('description').optional().isString(),
-        body('dueDate').optional().isISO8601().toDate()
+        body("title").optional().isLength({ min: 1 }).withMessage("Title cannot be empty."),
+        body("status")
+            .optional()
+            .isIn(["pending", "in progress", "completed"])
+            .withMessage("Invalid status value."),
+        body("description").optional().isString(),
+        body("dueDate").optional().isISO8601().toDate(),
+
+        // NEW: assignedToId instead of assignedToName
+        body("assignedToId")
+            .optional()
+            .isMongoId()
+            .withMessage("Invalid assignedToId."),
     ],
     pmsController.updateTaskByPM
 );
 
+
 router.put(
-    '/teams/:teamId',
+    "/teams/:teamId",
     isAuth,
-    checkRole('projectManager'),
+    checkRole("projectManager"),
     [
-        body('name').optional().isString().trim().notEmpty(),
-        body('members').optional().isArray(),
-        body('members.*').optional().isMongoId()
+        param("teamId").isMongoId().withMessage("Invalid teamId."),
+
+        body("newName")
+            .optional()
+            .isString()
+            .trim()
+            .notEmpty()
+            .withMessage("newName cannot be empty."),
+
+        body("membersToAdd")
+            .optional()
+            .isArray()
+            .withMessage("membersToAdd must be an array."),
+        body("membersToAdd.*")
+            .optional()
+            .isMongoId()
+            .withMessage("Each membersToAdd item must be a valid MongoId."),
+
+        body("membersToRemove")
+            .optional()
+            .isArray()
+            .withMessage("membersToRemove must be an array."),
+        body("membersToRemove.*")
+            .optional()
+            .isMongoId()
+            .withMessage("Each membersToRemove item must be a valid MongoId."),
     ],
     pmsController.editTeam
 );

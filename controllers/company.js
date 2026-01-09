@@ -124,11 +124,11 @@ exports.setProjectManager = (req, res) => {
         return res.status(400).json({ errors: errors.array() });
     }
 
-    const { name } = req.body;      // ✅ user NAME
-    const companyId = req.userId;   // company (CEO) from JWT
+    const { userId } = req.body;     // ✅ user ID
+    const companyId = req.userId;    // company (CEO) from JWT
 
     User.findOne({
-        name: name,
+        _id: userId,
         company: companyId
     })
         .then((user) => {
@@ -160,13 +160,14 @@ exports.deleteUser = (req, res) => {
         return res.status(400).json({ errors: errors.array() });
     }
 
-    const companyId = req.userId; // company (CEO) from JWT
-    const { name } = req.body;    // ✅ user NAME
+    const companyId = req.userId;       // company (CEO) from JWT
+    const { userId } = req.body;        // ✅ user ID
 
     let targetUser = null;
+    let teamsContainingUser = [];       // capture before pulling
 
-    // 1) Find user by NAME in this company
-    User.findOne({ name: name, company: companyId })
+    // 1) Find user by ID in this company
+    User.findOne({ _id: userId, company: companyId })
         .then((user) => {
             if (!user) {
                 res.status(404).json({ message: "User not found" });
@@ -175,14 +176,25 @@ exports.deleteUser = (req, res) => {
 
             targetUser = user;
 
-            // 2) Delete tasks assigned to this user
+            // 2) Find teams that contain this user (BEFORE we pull him out)
+            return Team.find({ members: user._id, company: companyId })
+                .select("_id")
+                .then((teams) => {
+                    teamsContainingUser = teams.map((t) => t._id);
+                    return user;
+                });
+        })
+        .then((user) => {
+            if (!user) return null;
+
+            // 3) Delete tasks assigned to this user
             return Task.deleteMany({ assignedTo: user._id, company: companyId })
                 .then(() => user);
         })
         .then((user) => {
             if (!user) return null;
 
-            // 3) Remove user from all teams
+            // 4) Remove user from all teams
             return Team.updateMany(
                 { members: user._id, company: companyId },
                 { $pull: { members: user._id } }
@@ -191,21 +203,18 @@ exports.deleteUser = (req, res) => {
         .then((user) => {
             if (!user) return null;
 
-            // 4) Remove teams from projects (safe cleanup)
-            return Team.find({ members: user._id }).distinct("_id")
-                .then((teamIds) => {
-                    if (teamIds.length === 0) return user;
+            // 5) Remove those teamIds from projects (safe cleanup)
+            if (!teamsContainingUser.length) return user;
 
-                    return Project.updateMany(
-                        { teams: { $in: teamIds } },
-                        { $pull: { teams: { $in: teamIds } } }
-                    ).then(() => user);
-                });
+            return Project.updateMany(
+                { company: companyId, teams: { $in: teamsContainingUser } },
+                { $pull: { teams: { $in: teamsContainingUser } } }
+            ).then(() => user);
         })
         .then((user) => {
             if (!user) return null;
 
-            // 5) Finally delete user
+            // 6) Finally delete user
             return User.findByIdAndDelete(user._id);
         })
         .then((deleted) => {
