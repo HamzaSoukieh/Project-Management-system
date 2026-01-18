@@ -118,33 +118,58 @@ exports.createUser = (req, res) => {
 };
 
 
-exports.setProjectManager = (req, res) => {
+exports.updateUserRole = (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         return res.status(400).json({ errors: errors.array() });
     }
 
-    const { userId } = req.body;     // ✅ user ID
-    const companyId = req.userId;    // company (CEO) from JWT
+    const { userId } = req.params;
+    const { role } = req.body;
+    const companyId = req.userId;
 
-    User.findOne({
-        _id: userId,
-        company: companyId
-    })
+    let targetUser;
+
+    User.findOne({ _id: userId, company: companyId })
         .then((user) => {
             if (!user) {
                 res.status(404).json({ message: "User not found" });
                 return null;
             }
+            targetUser = user;
 
-            user.role = "projectManager";
+            // If demoting to member, enforce safety checks
+            if (role === "member" && user.role === "projectManager") {
+                return Promise.all([
+                    Project.countDocuments({ company: companyId, projectManager: user._id }),
+                    Team.countDocuments({ company: companyId, projectManager: user._id }),
+                ]).then(([projectsCount, teamsCount]) => {
+                    if (projectsCount > 0 || teamsCount > 0) {
+                        res.status(409).json({
+                            message:
+                                "Cannot change role to member while user is assigned as project manager to projects/teams. Reassign first.",
+                            details: { projectsCount, teamsCount },
+                        });
+                        return null;
+                    }
+                    return user;
+                });
+            }
+
+            return user;
+        })
+        .then((user) => {
+            if (!user) return null;
+
+            // If promoting to projectManager, no need to touch projects/teams yet
+            user.role = role;
             return user.save();
         })
         .then((updatedUser) => {
             if (!updatedUser) return;
             res.status(200).json({
-                message: "User promoted to Project Manager",
-                user: updatedUser
+                message: `User role updated to ${updatedUser.role}`,
+                user: updatedUser,
             });
         })
         .catch((err) => {
@@ -161,7 +186,8 @@ exports.deleteUser = (req, res) => {
     }
 
     const companyId = req.userId;       // company (CEO) from JWT
-    const { userId } = req.body;        // ✅ user ID
+    const { userId } = req.params;
+    // ✅ user ID
 
     let targetUser = null;
     let teamsContainingUser = [];       // capture before pulling
@@ -280,6 +306,8 @@ exports.getCompanyDashboard = async (req, res) => {
         const [
             totalProjects,
             activeProjects,
+            completedProjects,
+            onHoldProjects,
             totalTeams,
             totalUsers,
             totalTasks,
@@ -289,42 +317,74 @@ exports.getCompanyDashboard = async (req, res) => {
             overdueTasks,
             dueSoonTasks,
         ] = await Promise.all([
+            // Projects (all + breakdown)
             Project.countDocuments({ company: companyId }),
             Project.countDocuments({ company: companyId, status: "active" }),
+            Project.countDocuments({ company: companyId, status: "completed" }),
+            Project.countDocuments({ company: companyId, status: "on hold" }),
+
+            // Teams / Users / Tasks totals
             Team.countDocuments({ company: companyId }),
             User.countDocuments({ company: companyId }),
             Task.countDocuments({ company: companyId }),
-            Task.countDocuments({ company: companyId, dueDate: { $lt: now }, status: { $ne: "completed" } }),
+
+            // Overdue / Due soon tasks
+            Task.countDocuments({
+                company: companyId,
+                dueDate: { $lt: now },
+                status: { $ne: "completed" },
+            }),
             Task.countDocuments({
                 company: companyId,
                 dueDate: { $gte: now, $lte: soon },
                 status: { $ne: "completed" },
             }),
+
+            // Latest projects (includes ALL statuses)
             Project.find({ company: companyId })
-                .select("name status dueDate createdAt")
+                .select("name status dueDate createdAt projectManager")
+                .populate("projectManager", "name email")
                 .sort({ createdAt: -1 })
                 .limit(10)
                 .lean(),
-            Task.find({ company: companyId, dueDate: { $lt: now }, status: { $ne: "completed" } })
-                .select("title status dueDate progress project assignedTo")
-                .populate("project", "name")
+
+            // Overdue tasks (top 10)
+            Task.find({
+                company: companyId,
+                dueDate: { $lt: now },
+                status: { $ne: "completed" },
+            })
+                .select("title status dueDate progress project assignedTo team priority")
+                .populate("project", "name status")
                 .populate("assignedTo", "name email")
+                .populate("team", "name")
                 .sort({ dueDate: 1 })
                 .limit(10)
                 .lean(),
-            Task.find({ company: companyId, dueDate: { $gte: now, $lte: soon }, status: { $ne: "completed" } })
-                .select("title status dueDate progress project assignedTo")
-                .populate("project", "name")
+
+            // Due soon tasks (top 10)
+            Task.find({
+                company: companyId,
+                dueDate: { $gte: now, $lte: soon },
+                status: { $ne: "completed" },
+            })
+                .select("title status dueDate progress project assignedTo team priority")
+                .populate("project", "name status")
                 .populate("assignedTo", "name email")
+                .populate("team", "name")
                 .sort({ dueDate: 1 })
                 .limit(10)
                 .lean(),
         ]);
 
-        res.json({
+        return res.json({
             summary: {
                 totalProjects,
-                activeProjects,
+                projectsByStatus: {
+                    active: activeProjects,
+                    completed: completedProjects,
+                    "on hold": onHoldProjects,
+                },
                 totalTeams,
                 totalUsers,
                 totalTasks,
@@ -337,9 +397,10 @@ exports.getCompanyDashboard = async (req, res) => {
         });
     } catch (err) {
         if (res.headersSent) return;
-        res.status(500).json({ message: err.message });
+        return res.status(500).json({ message: err.message });
     }
 };
+
 
 
 exports.getCompanyProjects = (req, res) => {

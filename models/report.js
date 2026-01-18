@@ -10,7 +10,7 @@ const reportSchema = new mongoose.Schema({
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     team: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: true },
     project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
-    company: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
+    company: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 
     createdAt: { type: Date, default: Date.now }
 });

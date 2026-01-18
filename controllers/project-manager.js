@@ -535,11 +535,25 @@ exports.getPMDashboard = (req, res) => {
         .then(function (projects) {
             const projectIds = projects.map((p) => p._id);
 
+            // ✅ projects status breakdown (API keys normalized: onHold instead of "on hold")
+            const managedProjectsByStatus = {
+                active: 0,
+                completed: 0,
+                onHold: 0,
+            };
+
+            projects.forEach((p) => {
+                if (p.status === "active") managedProjectsByStatus.active += 1;
+                else if (p.status === "completed") managedProjectsByStatus.completed += 1;
+                else if (p.status === "on hold") managedProjectsByStatus.onHold += 1;
+            });
+
             // If PM manages no projects, return clean empty dashboard
             if (projectIds.length === 0) {
                 return res.json({
                     summary: {
                         managedProjects: 0,
+                        managedProjectsByStatus,
                         totalTasks: 0,
                         openTasks: 0,
                         overdueCount: 0,
@@ -574,7 +588,7 @@ exports.getPMDashboard = (req, res) => {
                 dueDate: { $lt: now },
             })
                 .select("title status dueDate progress project assignedTo priority")
-                .populate("project", "name")
+                .populate("project", "name status")
                 .populate("assignedTo", "name email")
                 .sort({ dueDate: 1 })
                 .limit(10)
@@ -585,7 +599,7 @@ exports.getPMDashboard = (req, res) => {
                 dueDate: { $gte: now, $lte: soon },
             })
                 .select("title status dueDate progress project assignedTo priority")
-                .populate("project", "name")
+                .populate("project", "name status")
                 .populate("assignedTo", "name email")
                 .sort({ dueDate: 1 })
                 .limit(10)
@@ -598,11 +612,13 @@ exports.getPMDashboard = (req, res) => {
                     res.json({
                         summary: {
                             managedProjects: projects.length,
+                            managedProjectsByStatus, // ✅ { active, completed, onHold }
                             totalTasks,
                             openTasks,
                             overdueCount,
                             dueSoonCount,
                         },
+                        // ✅ returns projects of ALL statuses (active/completed/on hold)
                         projects: projects.slice(0, 10),
                         overdueTasks,
                         dueSoonTasks,

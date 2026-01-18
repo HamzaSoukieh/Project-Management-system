@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { body } = require('express-validator'); // ✅ ONLY HERE
+const { body, param } = require('express-validator'); // ✅ ONLY HERE
 
 const companyReports = require('../controllers/report');
 const companyController = require('../controllers/company');
@@ -81,28 +81,33 @@ router.post(
 );
 // Only a company can assign project managers
 router.put(
-    "/set-manager",
+    "/users/:userId/role",
     isAuth,
     checkRole("company"),
     [
-        body("userId")
+        param("userId")
             .isMongoId()
-            .withMessage("Valid userId is required.")
+            .withMessage("Valid userId is required."),
+
+        body("role")
+            .isIn(["member", "projectManager"])
+            .withMessage("Role must be either member or projectManager")
     ],
-    companyController.setProjectManager
+    companyController.updateUserRole
 );
 
 router.delete(
-    "/delete-user",
+    "/users/:userId",
     isAuth,
     checkRole("company"),
     [
-        body("userId")
+        param("userId")
             .isMongoId()
             .withMessage("Valid userId is required.")
     ],
     companyController.deleteUser
 );
+
 
 router.delete(
     '/projects/:projectId',
