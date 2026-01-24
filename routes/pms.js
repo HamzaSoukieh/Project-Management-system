@@ -189,10 +189,10 @@ router.patch(
 );
 
 router.get(
-    '/projects/:projectId/reports',
+    '/projects/reports',
     isAuth,
     checkRole('projectManager'),
-    reportController.getProjectReports
+    reportController.getAllCompanyReports
 );
 
 router.delete(
