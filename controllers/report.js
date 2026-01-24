@@ -5,6 +5,9 @@ const Team = require("../models/team");
 const Project = require("../models/project");
 const fs = require('fs');
 const path = require('path');
+const mongoose = require("mongoose");
+
+
 
 const { sendReportCreatedEmail } = require("../utils/mailer");
 
@@ -212,29 +215,71 @@ exports.getMyTeamReports = (req, res, next) => {
 };
 
 exports.getProjectReports = (req, res, next) => {
-    const projectId = req.params.projectId;
+    const { projectId } = req.params;
     const pmId = req.userId;
     const companyId = req.companyId;
 
-    Project.findOne({ _id: projectId, projectManager: pmId, company: companyId })
-        .then(project => {
-            if (!project) {
-                res.status(403).json({ message: 'Not your project.' });
-                return null; // ✅ stop chain
+    // 1) Validate ObjectId early
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+        return res.status(400).json({ message: "Invalid projectId." });
+    }
+
+    // 2) Pagination
+    const page = Math.max(parseInt(req.query.page || "1", 10), 1);
+    const limitRaw = parseInt(req.query.limit || "20", 10);
+    const limit = Math.min(Math.max(limitRaw, 1), 100);
+    const skip = (page - 1) * limit;
+
+    // 3) Authorization (PM must manage this project)
+    Project.exists({
+        _id: projectId,
+        projectManager: pmId,
+        company: companyId,
+    })
+        .then((ownsProject) => {
+            // Avoid leaking project existence
+            if (!ownsProject) {
+                res.status(404).json({ message: "Project not found." });
+                return null; // ⛔ stop chain
             }
 
-            return Report.find({ project: projectId, company: companyId })
-                .populate('createdBy', 'name email')
-                .then(reports => {
-                    res.status(200).json({ project, reports });
-                    return true;
-                });
+            // 4) Fetch reports + total count in parallel
+            return Promise.all([
+                Report.find({ project: projectId, company: companyId })
+                    .select("title description fileUrl fileType createdBy createdAt")
+                    .populate("createdBy", "name email")
+                    .sort({ createdAt: -1 })
+                    .skip(skip)
+                    .limit(limit)
+                    .lean(),
+
+                Report.countDocuments({ project: projectId, company: companyId }),
+            ]);
         })
-        .catch(err => {
+        .then((result) => {
+            if (!result) return;
+
+            const [reports, total] = result;
+
+            // 5) Clean response (Option B)
+            res.status(200).json({
+                reports,
+                meta: {
+                    total,
+                    count: reports.length,
+                    page,
+                    limit,
+                    pages: Math.ceil(total / limit),
+                    sort: "-createdAt",
+                },
+            });
+        })
+        .catch((err) => {
             if (res.headersSent) return;
             res.status(500).json({ message: err.message });
         });
 };
+
 
 exports.getAllCompanyReports = (req, res) => {
     const companyId = req.userId; // company account id
